@@ -1,0 +1,42 @@
+type User @table {
+  username: String!
+  email: String!
+  createdAt: Timestamp!
+  displayName: String
+  bio: String
+  company: String
+  jobTitle: String
+  profilePictureUrl: String
+}
+
+type Connection @table(key: ["initiator", "recipient"]) {
+  initiator: User!
+  recipient: User!
+  status: String!
+  createdAt: Timestamp!
+}
+
+type Document @table {
+  title: String!
+  documentType: String!
+  contentUrl: String!
+  createdAt: Timestamp!
+  description: String
+  tags: [String]
+  thumbnailUrl: String
+}
+
+type DocumentInteraction @table(key: ["user", "document", "interactionType"]) {
+  user: User!
+  document: Document!
+  interactionType: String!
+  createdAt: Timestamp!
+}
+
+type Comment @table {
+  user: User!
+  document: Document!
+  content: String!
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+}

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "registless",
+    "slug": "registless",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "*/"
+    ],
+    "plugins": [
+      ["expo-camera", {"cameraPermission": "Kamera szükséges a QR kód olvasáshoz."}],
+      ["expo-image-picker", {"photosPermission": "A kép OCR importhoz szükséges."}]
+    ],
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.INTERNET"
+      ],
+      "package": "com.starlabs.registless",
+      "googleServicesFile": "./google-services.json"
+    }
+  }
+}

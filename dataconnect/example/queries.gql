@@ -1,0 +1,52 @@
+# 1. Query to get a user's profile by their ID (accessible to any logged-in user)
+query GetUserProfileById($userId: UUID!) @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users.") {
+  user(id: $userId) {
+    id
+    username
+    email
+    displayName
+    bio
+    profilePictureUrl
+    createdAt
+  }
+}
+
+# 2. Query to get all documents (publicly accessible)
+query ListAllDocuments @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  documents {
+    id
+    title
+    documentType
+    contentUrl
+    description
+    tags
+    thumbnailUrl
+    createdAt
+  }
+}
+
+# 3. Mutation to create a new comment on a document (accessible to any logged-in user)
+mutation CreateComment($documentId: UUID!, $content: String!) @auth(level: USER) {
+  comment_insert(data: {
+    documentId: $documentId,
+    content: $content,
+    userId_expr: "auth.uid",
+    createdAt_expr: "request.time",
+    updatedAt_expr: "request.time"
+  })
+}
+
+# 4. Query to get comments for a specific document (publicly accessible)
+query GetCommentsForDocument($documentId: UUID!) @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  comments(where: {documentId: {eq: $documentId}}, orderBy: [{createdAt: DESC}]) {
+    id
+    content
+    createdAt
+    user {
+      id
+      username
+      displayName
+      profilePictureUrl
+    }
+  }
+}

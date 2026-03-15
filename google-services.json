@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "27530670886",
+    "project_id": "registless",
+    "storage_bucket": "registless.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:27530670886:android:1432f3511f369a397807e7",
+        "android_client_info": {
+          "package_name": "com.starlabs.registless"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD1DxpshaZHuumaa6xCcGqd9iuoHAzOHCE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

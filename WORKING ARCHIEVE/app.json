@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "registless",
+    "slug": "registless",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "*/"
+    ],
+    "plugins": [
+      "@react-native-ml-kit/text-recognition",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kamera szükséges a QR kód olvasáshoz."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "A kép OCR importhoz szükséges."
+        }
+      ]
+    ],
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
+      "package": "com.anonymous.registless"
+    }
+  }
+}

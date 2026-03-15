@@ -1,0 +1,84 @@
+mutation CreateDemoData @transaction @auth(level: USER, insecureReason: "Seed data mutations are for development/testing and are safe to run as any authenticated user.") {
+  user1: user_insert(data: {
+    id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    username: "alice_doe",
+    email: "alice.doe@example.com",
+    createdAt: "2023-01-01T10:00:00Z",
+    displayName: "Alice Doe",
+    bio: "Passionate about tech and open-source.",
+    company: "Tech Solutions Inc.",
+    jobTitle: "Software Engineer",
+    profilePictureUrl: "https://example.com/alice.jpg"
+  })
+  user2: user_insert(data: {
+    id: "b1f0c2d3-1e4a-5b6c-7d8e-9f0a1b2c3d4e",
+    username: "bob_smith",
+    email: "bob.smith@example.com",
+    createdAt: "2023-01-05T11:30:00Z",
+    displayName: "Bob Smith",
+    bio: "Enjoys photography and exploring new places.",
+    company: "Creative Labs",
+    jobTitle: "UI/UX Designer",
+    profilePictureUrl: "https://example.com/bob.jpg"
+  })
+  document1: document_insert(data: {
+    id: "c2d3e4f5-a6b7-8c9d-0e1f-2a3b4c5d6e7f",
+    title: "Introduction to Firebase Data Connect",
+    documentType: "Article",
+    contentUrl: "https://example.com/article1.pdf",
+    createdAt: "2023-01-10T14:00:00Z",
+    description: "A comprehensive guide to getting started with Firebase Data Connect.",
+    tags: ["Firebase", "Data Connect", "GraphQL", "Backend"],
+    thumbnailUrl: "https://example.com/thumb1.png"
+  })
+  document2: document_insert(data: {
+    id: "d3e4f5a6-b7c8-d9e0-f1a2-b3c4d5e6f7a8",
+    title: "Advanced GraphQL Techniques",
+    documentType: "Tutorial",
+    contentUrl: "https://example.com/tutorial2.html",
+    createdAt: "2023-01-15T16:45:00Z",
+    description: "Dive deep into advanced GraphQL concepts and best practices.",
+    tags: ["GraphQL", "Advanced", "Development"],
+    thumbnailUrl: "https://example.com/thumb2.png"
+  })
+  comment1: comment_insert(data: {
+    id: "e4f5a6b7-c8d9-e0f1-a2b3-c4d5e6f7a8b9",
+    userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    documentId: "c2d3e4f5-a6b7-8c9d-0e1f-2a3b4c5d6e7f",
+    content: "Great article! Very informative.",
+    createdAt: "2023-01-11T09:15:00Z",
+    updatedAt: "2023-01-11T09:15:00Z"
+  })
+  comment2: comment_insert(data: {
+    id: "f5a6b7c8-d9e0-f1a2-b3c4-d5e6f7a8b9c0",
+    userId: "b1f0c2d3-1e4a-5b6c-7d8e-9f0a1b2c3d4e",
+    documentId: "d3e4f5a6-b7c8-d9e0-f1a2-b3c4d5e6f7a8",
+    content: "Excellent tutorial, I learned a lot.",
+    createdAt: "2023-01-16T10:00:00Z",
+    updatedAt: "2023-01-16T10:00:00Z"
+  })
+  connection1: connection_insert(data: {
+    initiatorId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    recipientId: "b1f0c2d3-1e4a-5b6c-7d8e-9f0a1b2c3d4e",
+    status: "ACCEPTED",
+    createdAt: "2023-01-02T12:00:00Z"
+  })
+  documentInteraction1: documentInteraction_insert(data: {
+    userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    documentId: "c2d3e4f5-a6b7-8c9d-0e1f-2a3b4c5d6e7f",
+    interactionType: "VIEW",
+    createdAt: "2023-01-10T14:30:00Z"
+  })
+  documentInteraction2: documentInteraction_insert(data: {
+    userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    documentId: "c2d3e4f5-a6b7-8c9d-0e1f-2a3b4c5d6e7f",
+    interactionType: "LIKE",
+    createdAt: "2023-01-10T14:45:00Z"
+  })
+  documentInteraction3: documentInteraction_insert(data: {
+    userId: "b1f0c2d3-1e4a-5b6c-7d8e-9f0a1b2c3d4e",
+    documentId: "d3e4f5a6-b7c8-d9e0-f1a2-b3c4d5e6f7a8",
+    interactionType: "VIEW",
+    createdAt: "2023-01-15T17:00:00Z"
+  })
+}
