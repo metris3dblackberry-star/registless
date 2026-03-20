@@ -5,20 +5,43 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": [
-      "*/"
-    ],
+    "assetBundlePatterns": ["*/"],
     "plugins": [
-      ["expo-camera", {"cameraPermission": "Kamera szükséges a QR kód olvasáshoz."}],
-      ["expo-image-picker", {"photosPermission": "A kép OCR importhoz szükséges."}]
+      [
+        "expo-camera",
+        { "cameraPermission": "Kamera szükséges a QR kód olvasáshoz." }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "A kép OCR importhoz szükséges." }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo.png",
+          "color": "#ff7a1a",
+          "sounds": []
+        }
+      ]
     ],
     "android": {
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC"
       ],
       "package": "com.starlabs.registless",
       "googleServicesFile": "./google-services.json"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "08da73b8-650a-4f46-9764-d91b95d2bb29"
+      }
     }
   }
 }

@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+android/
+ios/
+*.log
+*.lock
+.DS_Store
+stripe_key.txt
+functions/node_modules/
+WORKING ARCHIEVE/
+dataconnect/
+logo/

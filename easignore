@@ -1,0 +1,8 @@
+node_modules/
+.git/
+.expo/
+android/
+ios/
+*.log
+*.tar.gz
+functions/node_modules/

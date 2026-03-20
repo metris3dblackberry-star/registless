@@ -1,0 +1,176 @@
+import { StyleSheet } from "react-native";
+import { colors } from "./colors";
+
+export const shared = StyleSheet.create({
+  // Containers
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  scrollContent: {
+    paddingBottom: 35,
+    width: "100%",
+  },
+  formContent: {
+    paddingBottom: 45,
+    width: "100%",
+  },
+  fullWidth: { width: "100%" },
+
+  // Cards
+  card: {
+    width: "100%",
+    backgroundColor: colors.bgCard,
+    padding: 20,
+    borderRadius: 26,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+
+  // Buttons
+  btnPrimary: {
+    width: "100%",
+    backgroundColor: colors.bgButton,
+    padding: 20,
+    borderRadius: 22,
+    alignItems: "center",
+    marginTop: 10,
+    shadowColor: colors.danger,
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  btnOutline: {
+    width: "100%",
+    borderWidth: 1.4,
+    borderColor: colors.border,
+    padding: 18,
+    borderRadius: 22,
+    alignItems: "center",
+    marginTop: 12,
+    backgroundColor: colors.bgButtonOutline,
+    shadowColor: colors.danger,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 3,
+  },
+  btnDanger: {
+    width: "100%",
+    borderWidth: 1.4,
+    borderColor: colors.border,
+    padding: 18,
+    borderRadius: 22,
+    alignItems: "center",
+    marginTop: 12,
+    backgroundColor: "#180b0b",
+  },
+  panelBtn: {
+    width: "100%",
+    backgroundColor: colors.bgCard,
+    borderRadius: 26,
+    padding: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    shadowColor: colors.danger,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 2,
+  },
+
+  // Typography
+  title: {
+    color: colors.textPrimary,
+    fontSize: 30,
+    fontWeight: "bold",
+    marginBottom: 28,
+    textAlign: "center",
+  },
+  sectionTitle: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  label: {
+    color: colors.textPrimary,
+    fontSize: 18,
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  labelSmall: {
+    color: colors.textMuted,
+    marginTop: 6,
+  },
+  value: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    marginBottom: 6,
+  },
+  hint: {
+    color: colors.textHint,
+    fontSize: 14,
+    marginBottom: 18,
+    marginTop: 6,
+  },
+  btnTextPrimary: {
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  btnTextSecondary: {
+    color: colors.textPrimary,
+    fontSize: 16,
+  },
+  panelBtnTitle: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+  panelBtnSub: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    marginTop: 6,
+  },
+
+  // Input
+  input: {
+    width: "100%",
+    backgroundColor: colors.bgInput,
+    color: colors.textPrimary,
+    padding: 18,
+    borderRadius: 22,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    fontSize: 18,
+    shadowColor: colors.danger,
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 2,
+  },
+  textArea: {
+    width: "100%",
+    backgroundColor: colors.bgInput,
+    color: colors.textPrimary,
+    padding: 18,
+    borderRadius: 22,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    fontSize: 15,
+    minHeight: 120,
+  },
+});
