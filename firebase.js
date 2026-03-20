@@ -1,8 +1,6 @@
 // ─────────────────────────────────────────────────────────────────
-// firebase.js  –  Registless Firebase helper
-// EAS Build ready — AsyncStorage persistence
+// firebase.js — EAS Build ready
 // ─────────────────────────────────────────────────────────────────
-
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getFirestore, collection, doc, setDoc, getDoc,
@@ -41,10 +39,6 @@ const db      = getFirestore(app);
 const storage = getStorage(app);
 const rtdb    = getDatabase(app);
 
-// ─────────────────────────────────────────────────────────────────
-// FELHASZNÁLÓI PROFIL
-// ─────────────────────────────────────────────────────────────────
-
 export async function saveUserProfile(uid, data) {
   if (!uid) return;
   await setDoc(doc(db, "users", uid), { ...data, updatedAt: serverTimestamp() }, { merge: true });
@@ -55,10 +49,6 @@ export async function getUserProfile(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   return snap.exists() ? snap.data() : null;
 }
-
-// ─────────────────────────────────────────────────────────────────
-// KAPCSOLAT (CHANNEL)
-// ─────────────────────────────────────────────────────────────────
 
 export async function createOrGetChannel(sellerUid, buyerUid) {
   const channelId = `${sellerUid}_${buyerUid}`;
@@ -73,10 +63,6 @@ export async function createOrGetChannel(sellerUid, buyerUid) {
   }
   return channelId;
 }
-
-// ─────────────────────────────────────────────────────────────────
-// ÜZENETKÜLDÉS
-// ─────────────────────────────────────────────────────────────────
 
 export async function sendMessage(channelId, senderUid, text, type = "text", meta = {}) {
   const messagesRef = collection(db, "channels", channelId, "messages");
@@ -96,10 +82,6 @@ export function listenMessages(channelId, callback) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SZÁMLA KÜLDÉS
-// ─────────────────────────────────────────────────────────────────
-
 export async function sendInvoicePdf(channelId, senderUid, pdfData, invoiceId) {
   const path = `invoices/${channelId}/${invoiceId}.pdf`;
   const fileRef = storageRef(storage, path);
@@ -114,10 +96,6 @@ export function listenChannel(channelId, callback) {
     if (snap.exists()) callback(snap.data());
   });
 }
-
-// ─────────────────────────────────────────────────────────────────
-// PUSH TOKEN KEZELÉS
-// ─────────────────────────────────────────────────────────────────
 
 export async function savePushToken(uid, token) {
   if (!uid || !token) return;

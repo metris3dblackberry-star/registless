@@ -456,7 +456,7 @@ export default function App() {
       <SafeAreaView style={{ flex: 1 }}>
         <View style={s.homeScreen}>
           <Image source={require("./assets/logo.png")} style={s.logo} resizeMode="contain" />
-          <Text style={s.homeTitle}>REGISTLESS</Text>
+
 
           {/* Licensz badge */}
           {badge && (

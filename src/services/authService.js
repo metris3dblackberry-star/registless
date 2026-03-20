@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────
-// authService.js — Firebase Auth (EAS Build ready)
+// authService.js — EAS Build ready (Firebase Auth)
 // ─────────────────────────────────────────────────────────────────
 import {
   createUserWithEmailAndPassword,
