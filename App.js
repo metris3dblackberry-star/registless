@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────
 // App.js — REGISTLESS demo-ready navigator
 // ─────────────────────────────────────────────────────────────────
+import 'react-native-reanimated';
 import React, { useState, useRef, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, Image, ImageBackground,
