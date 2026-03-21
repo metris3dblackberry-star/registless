@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────
-// authService.js — EAS Build ready (Firebase Auth)
+// authService.js — EAS Build ready (valódi Firebase Auth)
 // ─────────────────────────────────────────────────────────────────
 import {
   createUserWithEmailAndPassword,
@@ -7,11 +7,10 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
 } from "firebase/auth";
-import { auth } from "../../firebase";
-import { saveUserProfile } from "../../firebase";
+import { auth, saveUserProfile } from "../../firebase";
 import { startTrial } from "./licenseService";
-import { initKeyPair } from "./cryptoService";
 
 export async function registerWithEmail(email, password, name) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -21,14 +20,16 @@ export async function registerWithEmail(email, password, name) {
     email: user.email, name: name || "", role: "seller", createdAt: Date.now(),
   });
   await startTrial(user.uid);
-  await initKeyPair(user.uid);
   return user;
 }
 
 export async function loginWithEmail(email, password) {
   const cred = await signInWithEmailAndPassword(auth, email, password);
-  await initKeyPair(cred.user.uid);
   return cred.user;
+}
+
+export async function resetPassword(email) {
+  await sendPasswordResetEmail(auth, email);
 }
 
 export async function loginWithGoogle() {
