@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "registless",
     "userInterfaceStyle": "automatic",
+
     "android": {
       "package": "com.starlabs.registless",
       "versionCode": 1,
@@ -19,12 +20,13 @@
         "NOTIFICATIONS"
       ]
     },
+
     "plugins": [
       [
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "1.9.24"
+            "kotlinVersion": "2.0.21"
           }
         }
       ],
@@ -32,6 +34,7 @@
       "expo-notifications",
       "expo-secure-store"
     ],
+
     "extra": {
       "eas": {
         "projectId": "08da73b8-650a-4f46-9764-d91b95d2bb29"
