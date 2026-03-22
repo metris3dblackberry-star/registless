@@ -165,8 +165,11 @@ export function applyOcrResult({
       `Partner hozzáadva OCR-rel: ${parsed.name || ""}`,
       { source: "ocr" }
     ));
-    Alert.alert("✅ Partner hozzáadva", parsed.name || "Névtelen partner");
-    navigate("partnerWorkspace", { contactId: newContact.id });
+    Alert.alert(
+      "✅ Partner hozzáadva",
+      `${parsed.name || "Névtelen partner"} sikeresen létrehozva!`,
+      [{ text: "OK", onPress: () => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard") }]
+    );
     return;
   }
 
