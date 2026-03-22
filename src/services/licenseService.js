@@ -1,8 +1,8 @@
-// ─────────────────────────────────────────────────────────────────
-// licenseService.js — Trial + PRO licensz kezelés
-// ─────────────────────────────────────────────────────────────────
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../firebase";
+// licenseService.js — AsyncStorage alapú licensz kezelés (Firebase-mentes)
+// Registless 2026-03-22
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const LICENSE_KEY_PREFIX = "registless_license_";
 
 export const TRIAL_LIMITS = {
   partners:  10,
@@ -18,17 +18,15 @@ export const PLANS = {
   pro:   "pro",
 };
 
-// ── Default státusz (null esetén) ─────────────────────────────────
-const DEFAULT_STATUS = { plan: PLANS.free, isActive: false, daysLeft: 0 };
+const DEFAULT_STATUS = { plan: PLANS.free, isActive: true, daysLeft: null };
 
 // ── Licensz lekérése ──────────────────────────────────────────────
 export async function getLicense(uid) {
   if (!uid) return null;
   try {
-    const snap = await getDoc(doc(db, "licenses", uid));
-    return snap.exists() ? snap.data() : null;
-  } catch (e) {
-    console.log("getLicense hiba:", e.message);
+    const raw = await AsyncStorage.getItem(LICENSE_KEY_PREFIX + uid);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
     return null;
   }
 }
@@ -46,26 +44,30 @@ export async function startTrial(uid) {
     proStartedAt: null,
     proEndsAt: null,
     stripeSubscriptionId: null,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    createdAt: now,
+    updatedAt: now,
   };
-  await setDoc(doc(db, "licenses", uid), license, { merge: true });
+  await AsyncStorage.setItem(LICENSE_KEY_PREFIX + uid, JSON.stringify(license));
   return license;
 }
 
-// ── PRO aktiválás ─────────────────────────────────────────────────
+// ── PRO aktiválás (Stripe webhook után hívandó) ───────────────────
 export async function activatePro(uid, stripeSubscriptionId, periodEnd) {
   if (!uid) return;
-  await setDoc(doc(db, "licenses", uid), {
+  const existing = await getLicense(uid);
+  const updated = {
+    ...(existing || {}),
+    uid,
     plan: PLANS.pro,
     stripeSubscriptionId,
     proStartedAt: Date.now(),
-    proEndsAt: periodEnd,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+    proEndsAt: periodEnd || null,
+    updatedAt: Date.now(),
+  };
+  await AsyncStorage.setItem(LICENSE_KEY_PREFIX + uid, JSON.stringify(updated));
 }
 
-// ── Licensz státusz ───────────────────────────────────────────────
+// ── Licensz státusz számítása ─────────────────────────────────────
 export function getLicenseStatus(license) {
   if (!license) return DEFAULT_STATUS;
 
@@ -95,39 +97,39 @@ export function getLicenseStatus(license) {
   return { plan: PLANS.free, isActive: true, daysLeft: null };
 }
 
-// ── Feature gate — null-safe ───────────────────────────────────────
-export function canAddPartner(licenseStatus, currentPartnerCount) {
+// ── Feature gate-ek ───────────────────────────────────────────────
+export function canAddPartner(licenseStatus, currentCount) {
   if (!licenseStatus) return false;
   if (licenseStatus.plan === PLANS.pro && licenseStatus.isActive) return true;
   if (licenseStatus.plan === PLANS.trial && licenseStatus.isActive) {
-    return currentPartnerCount < TRIAL_LIMITS.partners;
+    return currentCount < TRIAL_LIMITS.partners;
   }
   return false;
 }
 
-export function canAddInvoice(licenseStatus, currentInvoiceCount) {
+export function canAddInvoice(licenseStatus, currentCount) {
   if (!licenseStatus) return false;
   if (licenseStatus.plan === PLANS.pro && licenseStatus.isActive) return true;
   if (licenseStatus.plan === PLANS.trial && licenseStatus.isActive) {
-    return currentInvoiceCount < TRIAL_LIMITS.invoices;
+    return currentCount < TRIAL_LIMITS.invoices;
   }
   return false;
 }
 
-export function canSendMessage(licenseStatus, currentMessageCount) {
+export function canSendMessage(licenseStatus, currentCount) {
   if (!licenseStatus) return false;
   if (licenseStatus.plan === PLANS.pro && licenseStatus.isActive) return true;
   if (licenseStatus.plan === PLANS.trial && licenseStatus.isActive) {
-    return currentMessageCount < TRIAL_LIMITS.messages;
+    return currentCount < TRIAL_LIMITS.messages;
   }
   return false;
 }
 
-export function canExportPdf(licenseStatus, currentPdfCount) {
+export function canExportPdf(licenseStatus, currentCount) {
   if (!licenseStatus) return false;
   if (licenseStatus.plan === PLANS.pro && licenseStatus.isActive) return true;
   if (licenseStatus.plan === PLANS.trial && licenseStatus.isActive) {
-    return currentPdfCount < TRIAL_LIMITS.pdfExport;
+    return currentCount < TRIAL_LIMITS.pdfExport;
   }
   return false;
 }
@@ -136,13 +138,13 @@ export function canExportPdf(licenseStatus, currentPdfCount) {
 export function getLicenseBadge(licenseStatus) {
   if (!licenseStatus) return { text: "BETÖLTÉS...", color: "#888" };
   if (licenseStatus.plan === PLANS.pro && licenseStatus.isActive) {
-    return { text: "PRO", color: "#ff7a1a" };
+    return { text: "✅ PRO", color: "#ff7a1a" };
   }
   if (licenseStatus.plan === PLANS.trial && licenseStatus.isActive) {
-    return { text: `TRIAL · ${licenseStatus.daysLeft} nap`, color: "#00BCD4" };
+    return { text: `⏳ TRIAL · ${licenseStatus.daysLeft} nap`, color: "#00BCD4" };
   }
   if (licenseStatus.plan === PLANS.trial && !licenseStatus.isActive) {
-    return { text: "LEJÁRT", color: "#f44336" };
+    return { text: "❌ LEJÁRT", color: "#f44336" };
   }
   return { text: "INGYENES", color: "#888" };
 }

@@ -1,285 +1,381 @@
-// ─────────────────────────────────────────────────────────────────
-// OcrScreen.js — OCR képernyő
-// 3 use case: saját profil / új partner / számla elemzés
-// ─────────────────────────────────────────────────────────────────
-import React, { useState, useRef } from "react";
+import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform, StyleSheet, Alert,
-} from "react-native";
-import { CameraView } from "expo-camera";
-import { colors } from "../theme/colors";
-import { shared } from "../theme/styles";
-import { useOcr } from "../hooks/useOcr";
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Clipboard,
+} from 'react-native';
 
-const USE_CASES = [
-  { id: "profile", label: "Saját profil kitöltése", icon: "👤", desc: "Töltsd ki a profilod névjegyből vagy dokumentumból" },
-  { id: "partner", label: "Új partner névjegyből", icon: "🏪", desc: "Adj hozzá új partnert fotóból vagy beillesztett szövegből" },
-  { id: "invoice", label: "Számla / dokumentum", icon: "📄", desc: "Elemezz számlát vagy céges dokumentumot" },
-];
+const HINT_LABELS = {
+  NA: 'Név',
+  TE: 'Telefonszám',
+  EM: 'Email',
+  TX: 'Adószám',
+  AD: 'Cím',
+  BA: 'Bankszámlaszám',
+};
 
-export default function OcrScreen({
-  permission,
-  requestPermission,
-  defaultUseCase = "partner",
-  onApplyProfile,   // (parsed) => void — saját profil
-  onApplyPartner,   // (parsed) => void — új partner
-  onApplyInvoice,   // (parsed) => void — számla
-  onBack,
-}) {
-  const [useCase, setUseCase] = useState(defaultUseCase);
-  const [mode, setMode] = useState("text"); // "text" | "camera"
-  const [parsed, setParsed] = useState(null);
-  const cameraRef = useRef(null);
-  const {
-    rawText, setRawText, isProcessing,
-    fromGallery, fromCameraPhoto,
-    parseForProfile, parseForPartner, parseForInvoice,
-  } = useOcr();
+function parseOCRHints(text) {
+  const results = [];
+  const lines = text.split('\n');
 
-  async function handleAnalyze() {
-    if (!rawText.trim()) {
-      Alert.alert("OCR", "Nincs szöveg az elemzéshez.");
+  for (const line of lines) {
+    const match = line.match(/^(NA|TE|EM|TX|AD|BA)[:\s]+(.+)$/i);
+    if (match) {
+      const code = match[1].toUpperCase();
+      results.push({
+        code,
+        label: HINT_LABELS[code] || code,
+        value: match[2].trim(),
+      });
+    }
+  }
+
+  if (results.length === 0 && text.trim().length > 0) {
+    results.push({ code: 'NA', label: 'Beolvasott szöveg', value: text.trim() });
+  }
+
+  return results;
+}
+
+export default function OCRScreen() {
+  const [inputText, setInputText] = useState('');
+  const [parsedFields, setParsedFields] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState('local');
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await Clipboard.getString();
+      if (text) {
+        setInputText(text);
+      } else {
+        Alert.alert('Üres vágólap', 'Nincs szöveg a vágólapon.');
+      }
+    } catch {
+      Alert.alert('Hiba', 'Nem sikerült beolvasni a vágólapot.');
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!inputText.trim()) {
+      Alert.alert('Üres mező', 'Illeszd be a felismert szöveget elemzés előtt.');
       return;
     }
+
+    setLoading(true);
+
     try {
-      let result;
-      if (useCase === "profile") result = await parseForProfile(rawText);
-      else if (useCase === "partner") result = await parseForPartner(rawText);
-      else result = await parseForInvoice(rawText);
-      setParsed(result);
-    } catch (e) {
-      Alert.alert("Elemzési hiba", e.message);
+      if (analysisMode === 'local') {
+        const fields = parseOCRHints(inputText);
+        setParsedFields(fields);
+      } else {
+        const response = await fetch(
+          'https://us-central1-registless-default-rtdb.cloudfunctions.net/ocrAnalyze',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: inputText }),
+          }
+        );
+        const data = await response.json();
+        if (data.fields) {
+          setParsedFields(data.fields);
+        } else {
+          setParsedFields(parseOCRHints(inputText));
+        }
+      }
+    } catch (error) {
+      console.warn('[OCR] hiba, lokális parse:', error);
+      setParsedFields(parseOCRHints(inputText));
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  async function handleGallery() {
-    const text = await fromGallery();
-    if (text) setParsed(null);
-  }
+  const handleClear = () => {
+    setInputText('');
+    setParsedFields([]);
+  };
 
-  async function handleCamera() {
-    if (!permission?.granted) {
-      await requestPermission();
-      return;
-    }
-    setMode("camera");
-  }
+  const handleCopyField = (value) => {
+    Clipboard.setString(value);
+    Alert.alert('Másolva', `"${value}" a vágólapon.`);
+  };
 
-  async function handleTakePhoto() {
-    try {
-      const cam = cameraRef.current;
-      if (!cam) return;
-      const photo = await cam.takePictureAsync({ quality: 0.8, shutterSound: false });
-      setMode("text");
-      await fromCameraPhoto(photo.uri);
-      setParsed(null);
-    } catch (e) {
-      Alert.alert("Fotó hiba", e.message);
-      setMode("text");
-    }
-  }
+  return (
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+      <View style={styles.header}>
+        <Text style={styles.title}>Szöveg beillesztése</Text>
+        <Text style={styles.subtitle}>
+          Fényképezd le a dokumentumot, majd illeszd be a felismert szöveget
+        </Text>
+      </View>
 
-  function handleApply() {
-    if (!parsed) return;
-    if (useCase === "profile") onApplyProfile?.(parsed);
-    else if (useCase === "partner") onApplyPartner?.(parsed);
-    else onApplyInvoice?.(parsed);
-  }
-
-  // ── Camera nézet ──────────────────────────────────────────────
-  if (mode === "camera") {
-    return (
-      <View style={{ flex: 1 }}>
-        <View style={ocr.scanHeader}>
-          <Text style={ocr.scanTitle}>📷  Fényképezd le a dokumentumot</Text>
-        </View>
-        <View style={{ flex: 1, position: "relative" }}>
-          <CameraView style={{ flex: 1 }} ref={cameraRef} />
-          {/* Célkereszt */}
-          <View pointerEvents="none" style={ocr.crosshairOverlay}>
-            <View style={ocr.crosshairH} />
-            <View style={ocr.crosshairV} />
-            <View style={[ocr.crosshairDiag, { transform: [{ rotate: "34deg" }] }]} />
-            <View style={[ocr.crosshairDiag, { transform: [{ rotate: "-34deg" }] }]} />
+      {/* Hint kódok */}
+      <View style={styles.hintsRow}>
+        {Object.entries(HINT_LABELS).map(([code, label]) => (
+          <View key={code} style={styles.hintBadge}>
+            <Text style={styles.hintCode}>{code}</Text>
+            <Text style={styles.hintLabel}>{label}</Text>
           </View>
-        </View>
-        <View style={ocr.scanFooter}>
-          <TouchableOpacity style={shared.btnPrimary} onPress={handleTakePhoto}>
-            <Text style={shared.btnTextPrimary}>📷  FOTÓ ÉS FELISMERÉS</Text>
+        ))}
+      </View>
+
+      {/* Input */}
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.textInput}
+          multiline
+          numberOfLines={8}
+          placeholder={
+            'Illeszd be a szöveget ide...\n\nPélda:\nNA: Kovács János\nEM: kovacs@email.com\nTE: +36 30 123 4567'
+          }
+          placeholderTextColor="#555"
+          value={inputText}
+          onChangeText={setInputText}
+          textAlignVertical="top"
+        />
+        <View style={styles.inputActions}>
+          <TouchableOpacity style={styles.actionBtn} onPress={handlePasteFromClipboard}>
+            <Text style={styles.actionBtnText}>📋 Beillesztés vágólapról</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={shared.btnOutline} onPress={() => setMode("text")}>
-            <Text style={shared.btnTextSecondary}>VISSZA</Text>
+          <TouchableOpacity style={[styles.actionBtn, styles.clearBtn]} onPress={handleClear}>
+            <Text style={styles.actionBtnText}>🗑 Törlés</Text>
           </TouchableOpacity>
         </View>
       </View>
-    );
-  }
 
-  // ── Fő OCR nézet ─────────────────────────────────────────────
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View style={{ flex: 1 }}>
-        <ScrollView
-          style={shared.fullWidth}
-          contentContainerStyle={[shared.formContent, { paddingHorizontal: 20, paddingTop: 20 }]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+      {/* Mód választó */}
+      <View style={styles.modeRow}>
+        <TouchableOpacity
+          style={[styles.modeBtn, analysisMode === 'local' && styles.modeBtnActive]}
+          onPress={() => setAnalysisMode('local')}
         >
-          <Text style={shared.title}>OCR IMPORT</Text>
+          <Text style={styles.modeBtnText}>Lokális</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeBtn, analysisMode === 'ai' && styles.modeBtnActive]}
+          onPress={() => setAnalysisMode('ai')}
+        >
+          <Text style={styles.modeBtnText}>AI (Firebase)</Text>
+        </TouchableOpacity>
+      </View>
 
-          {/* Use case választó */}
-          {USE_CASES.map((uc) => (
+      {/* Elemzés gomb */}
+      <TouchableOpacity
+        style={[styles.analyzeBtn, loading && styles.analyzeBtnDisabled]}
+        onPress={handleAnalyze}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.analyzeBtnText}>Elemzés indítása</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Eredmények */}
+      {parsedFields.length > 0 && (
+        <View style={styles.results}>
+          <Text style={styles.resultsTitle}>Felismert mezők</Text>
+          {parsedFields.map((field, index) => (
             <TouchableOpacity
-              key={uc.id}
-              style={[ocr.useCaseBtn, useCase === uc.id && ocr.useCaseBtnActive]}
-              onPress={() => { setUseCase(uc.id); setParsed(null); }}
+              key={index}
+              style={styles.fieldCard}
+              onPress={() => handleCopyField(field.value)}
+              activeOpacity={0.7}
             >
-              <Text style={ocr.useCaseIcon}>{uc.icon}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={ocr.useCaseLabel}>{uc.label}</Text>
-                <Text style={ocr.useCaseDesc}>{uc.desc}</Text>
+              <View style={styles.fieldHeader}>
+                <View style={styles.fieldCodeBadge}>
+                  <Text style={styles.fieldCode}>{field.code}</Text>
+                </View>
+                <Text style={styles.fieldLabel}>{field.label}</Text>
+                <Text style={styles.fieldCopyHint}>másolás</Text>
               </View>
-              {useCase === uc.id && <Text style={{ color: colors.accent, fontSize: 18 }}>✓</Text>}
+              <Text style={styles.fieldValue}>{field.value}</Text>
             </TouchableOpacity>
           ))}
+        </View>
+      )}
 
-          {/* Szöveg input */}
-          <Text style={[shared.label, { marginTop: 16 }]}>
-            Illeszd be a szöveget, vagy használj kamerát / galériát:
-          </Text>
-          <TextInput
-            style={shared.textArea}
-            multiline
-            value={rawText}
-            onChangeText={(t) => { setRawText(t); setParsed(null); }}
-            placeholder="Illeszd be az OCR szöveget..."
-            placeholderTextColor={colors.placeholder}
-            textAlignVertical="top"
-          />
-
-          {/* Gombok */}
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
-            <TouchableOpacity
-              style={[shared.btnOutline, { flex: 1, marginTop: 0 }]}
-              onPress={handleGallery}
-            >
-              <Text style={shared.btnTextSecondary}>🖼️  Galériából</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[shared.btnOutline, { flex: 1, marginTop: 0 }]}
-              onPress={handleCamera}
-            >
-              <Text style={shared.btnTextSecondary}>📷  Kamerával</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={[shared.btnPrimary, isProcessing && { opacity: 0.6 }]}
-            onPress={handleAnalyze}
-            disabled={isProcessing}
-          >
-            <Text style={shared.btnTextPrimary}>
-              {isProcessing ? "⏳  Elemzés..." : "🤖  AI ELEMZÉS"}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Eredmény */}
-          {parsed && (
-            <View style={[shared.card, { marginTop: 16 }]}>
-              <Text style={shared.sectionTitle}>FELISMERT ADATOK</Text>
-              {Object.entries(parsed)
-                .filter(([k, v]) => v && k !== "rawText" && k !== "amounts")
-                .map(([key, val]) => (
-                  <View key={key}>
-                    <Text style={shared.labelSmall}>{key}</Text>
-                    <Text style={shared.value}>{String(val)}</Text>
-                  </View>
-                ))}
-
-                  {/* Direct partner creation — wow feature */}
-              {useCase === "partner" && (
-                <TouchableOpacity
-                  style={[shared.btnPrimary, { marginTop: 12, backgroundColor: "rgba(255,122,26,0.25)", borderColor: "rgba(255,122,26,0.6)" }]}
-                  onPress={() => {
-                    onApplyPartner?.(parsed);
-                  }}
-                >
-                  <Text style={[shared.btnTextPrimary, { color: "#ff7a1a" }]}>
-                    ➕  Új partner létrehozása ezekből az adatokból
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity style={[shared.btnOutline, { marginTop: 10 }]} onPress={handleApply}>
-                <Text style={shared.btnTextSecondary}>
-                  {useCase === "profile" ? "✅  Profil frissítése" :
-                   useCase === "invoice" ? "📄  Számla mentése" : "✅  Betöltés"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <TouchableOpacity style={shared.btnOutline} onPress={onBack}>
-            <Text style={shared.btnTextSecondary}>VISSZA</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    </KeyboardAvoidingView>
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
-const ocr = StyleSheet.create({
-  useCaseBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.bgCard,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 8,
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    padding: 16,
+  },
+  header: {
+    marginBottom: 16,
+  },
+  title: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  subtitle: {
+    color: '#666',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  hintsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  hintBadge: {
+    backgroundColor: '#1a1a1a',
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    gap: 12,
+    borderColor: '#2a2a2a',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: 'center',
   },
-  useCaseBtnActive: {
-    borderColor: colors.accentBorder,
-    backgroundColor: colors.accentSoft,
+  hintCode: {
+    color: '#4fc3f7',
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: 'monospace',
   },
-  useCaseIcon: { fontSize: 24 },
-  useCaseLabel: { color: colors.textPrimary, fontSize: 15, fontWeight: "600" },
-  useCaseDesc: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  scanHeader: {
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: "rgba(0,0,0,0.16)",
+  hintLabel: {
+    color: '#888',
+    fontSize: 10,
+    marginTop: 1,
   },
-  scanTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: "bold", textAlign: "center" },
-  scanFooter: { padding: 20, backgroundColor: "rgba(0,0,0,0.16)" },
-  crosshairOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
+  inputContainer: {
+    marginBottom: 12,
   },
-  crosshairH: {
-    position: "absolute",
-    width: "74%",
-    height: 1.2,
-    backgroundColor: "rgba(255,122,26,0.9)",
+  textInput: {
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 10,
+    color: '#fff',
+    fontSize: 14,
+    padding: 12,
+    minHeight: 160,
+    fontFamily: 'monospace',
   },
-  crosshairV: {
-    position: "absolute",
-    height: "58%",
-    width: 1.2,
-    backgroundColor: "rgba(255,77,77,0.9)",
+  inputActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
   },
-  crosshairDiag: {
-    position: "absolute",
-    width: "70%",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.42)",
+  actionBtn: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  clearBtn: {
+    flex: 0.5,
+  },
+  actionBtnText: {
+    color: '#ccc',
+    fontSize: 13,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    alignItems: 'center',
+    backgroundColor: '#111',
+  },
+  modeBtnActive: {
+    borderColor: '#4fc3f7',
+    backgroundColor: '#0d2a36',
+  },
+  modeBtnText: {
+    color: '#ccc',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  analyzeBtn: {
+    backgroundColor: '#4fc3f7',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  analyzeBtnDisabled: {
+    opacity: 0.5,
+  },
+  analyzeBtnText: {
+    color: '#000',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  results: {
+    gap: 10,
+  },
+  resultsTitle: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  fieldCard: {
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#222',
+    borderRadius: 10,
+    padding: 12,
+  },
+  fieldHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+  },
+  fieldCodeBadge: {
+    backgroundColor: '#0d2a36',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  fieldCode: {
+    color: '#4fc3f7',
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+  },
+  fieldLabel: {
+    color: '#888',
+    fontSize: 12,
+    flex: 1,
+  },
+  fieldCopyHint: {
+    color: '#444',
+    fontSize: 11,
+  },
+  fieldValue: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
   },
 });

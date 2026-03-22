@@ -7,7 +7,6 @@
     "scheme": "registless",
     "userInterfaceStyle": "automatic",
     "icon": "./icon.png",
-
     "android": {
       "package": "com.starlabs.registless",
       "versionCode": 1,
@@ -24,7 +23,6 @@
       ],
       "googleServicesFile": "./google-services.json"
     },
-
     "plugins": [
       [
         "expo-build-properties",
@@ -38,9 +36,10 @@
       "@react-native-firebase/auth",
       "expo-camera",
       "expo-notifications",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-video",
+    
     ],
-
     "extra": {
       "eas": {
         "projectId": "08da73b8-650a-4f46-9764-d91b95d2bb29"
