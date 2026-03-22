@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────
-// firebase.js — EAS Build ready
+// firebase.js — auth NÉLKÜL (New Architecture kompatibilis)
 // ─────────────────────────────────────────────────────────────────
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
@@ -7,8 +7,6 @@ import {
   onSnapshot, addDoc, query, orderBy, serverTimestamp, updateDoc,
 } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { initializeAuth, getReactNativePersistence, getAuth } from "firebase/auth";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
@@ -22,17 +20,7 @@ const firebaseConfig = {
   measurementId:     "G-F0JQ1BZ73R",
 };
 
-let app, auth;
-if (getApps().length === 0) {
-  app  = initializeApp(firebaseConfig);
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-} else {
-  app  = getApp();
-  auth = getAuth(app);
-}
-
+const app     = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db      = getFirestore(app);
 const storage = getStorage(app);
 const rtdb    = getDatabase(app);
@@ -83,4 +71,4 @@ export async function getPushToken(uid) {
   return snap.exists() ? snap.data()?.pushToken || null : null;
 }
 
-export { db, storage, auth, rtdb };
+export { db, storage, rtdb };
