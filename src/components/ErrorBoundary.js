@@ -26,10 +26,10 @@ export class ErrorBoundary extends React.Component {
       }
       return (
         <View style={styles.container}>
-          <Text style={styles.title}>Valami hiba történt</Text>
+          <Text style={styles.title}>Valami hiba tortent</Text>
           <Text style={styles.message}>{this.state.errorMessage}</Text>
           <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>Újra</Text>
+            <Text style={styles.buttonText}>Ujra</Text>
           </TouchableOpacity>
         </View>
       );
@@ -72,17 +72,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-```
-
----
-
-## 📁 OCR fájl — előbb mutasd meg a struktúrát
-
-Az OCR screen-hez meg kell néznem hol van. Mutasd meg ezt a mappát:
-```
-C:\registless\src\
-```
-
-vagy
-```
-C:\registless\app\
