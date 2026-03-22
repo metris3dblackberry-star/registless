@@ -6,12 +6,15 @@
     "orientation": "portrait",
     "scheme": "registless",
     "userInterfaceStyle": "automatic",
+    "icon": "./icon.png",
 
     "android": {
       "package": "com.starlabs.registless",
       "versionCode": 1,
+      "icon": "./icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./icon.png",
+        "backgroundColor": "#1a0000"
       },
       "permissions": [
         "CAMERA",
@@ -27,7 +30,7 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "2.0.0"
+            "kotlinVersion": "1.9.24"
           }
         }
       ],
