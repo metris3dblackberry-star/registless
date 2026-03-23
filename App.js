@@ -211,7 +211,7 @@ export default function App() {
             const resp = await fetch(STRIPE_FUNCTION_URL, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ amount: Math.round(amount), invoiceId: label, sellerName: app.sellerName || "Registless", contactName: contact.name }),
+              body: JSON.stringify({ amount: Math.round(amount * 100), invoiceId: label, sellerName: app.sellerName || "Registless", contactName: contact.name }),
             });
             const data = await resp.json();
             if (data.url) {
@@ -539,7 +539,7 @@ export default function App() {
 
   // ── QR Megosztás — saját QR kód ──────────────────────────────
   if (screen === "qrShare") {
-    const qrValue    = app.sellerQrPayload || app.buyerQrPayload || app.sellerUid || "registless";
+    const qrValue    = app.sellerQrPayload || app.buyerQrPayload || app.sellerUid || authUser?.uid || "registless-default";
     const shareText  = `Adj hozzá engem a Registless appban!\n\nNévjegy: ${app.sellerName || app.buyerName || ""}\n${app.sellerCompany ? app.sellerCompany + "\n" : ""}Registless ID: ${qrValue}\n\nhttps://registless.ai`;
     content = (
       <SafeAreaView style={{ flex: 1, width: "100%" }}>
@@ -552,7 +552,13 @@ export default function App() {
           </Text>
 
           <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 24, shadowColor: "#ff7a1a", shadowOpacity: 0.4, shadowRadius: 24, elevation: 16 }}>
-            <QRCode value={qrValue} size={220} color="#111" backgroundColor="#fff" />
+            {!!qrValue && qrValue.length > 2 ? (
+              <QRCode value={qrValue} size={220} color="#111" backgroundColor="#fff" />
+            ) : (
+              <View style={{ width: 220, height: 220, backgroundColor: "#f0f0f0", borderRadius: 8, justifyContent: "center", alignItems: "center" }}>
+                <Text style={{ color: "#888", fontSize: 12, textAlign: "center" }}>QR generálás...{"\n"}Kérjük várjon</Text>
+              </View>
+            )}
           </View>
 
           <View style={{ marginTop: 28, alignItems: "center" }}>
@@ -1086,7 +1092,7 @@ function NewServiceScreen({ contact, quickServices = [], onSubmit, onAddToQuickL
 }
 
 const s = StyleSheet.create({
-  homeScreen: { flex: 1, justifyContent: "space-evenly", alignItems: "center", paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24 },
+  homeScreen: { flex: 1, justifyContent: "space-evenly", alignItems: "center", paddingHorizontal: 24, paddingTop: 7, paddingBottom: 24 },
   logo:       { width: 200, height: 120 },
   shareBtn:   { alignItems: "center", marginTop: 8 },
   shareIcon:  { width: 64, height: 64, borderRadius: 16 },
