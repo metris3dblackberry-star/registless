@@ -531,16 +531,33 @@ export default function App() {
       }}
       // ✅ ÚJ: Gyorslista hozzáadás
       onAddToQuickList={(qs) => {
-        app.addQuickService?.(qs);
+        try {
+          if (typeof app.addQuickService === "function") {
+            app.addQuickService(qs);
+          } else {
+            console.warn("[QuickService] addQuickService not available");
+          }
+        } catch (e) {
+          console.warn("[QuickService] hiba:", e);
+        }
       }}
       onBack={() => activeContact ? navigate("partnerWorkspace") : navigate("sellerDashboard")}
     />;
   }
 
-  // ── QR Megosztás — saját QR kód ──────────────────────────────
   if (screen === "qrShare") {
-    const qrValue    = app.sellerQrPayload || app.buyerQrPayload || app.sellerUid || authUser?.uid || "registless-default";
-    const shareText  = `Adj hozzá engem a Registless appban!\n\nNévjegy: ${app.sellerName || app.buyerName || ""}\n${app.sellerCompany ? app.sellerCompany + "\n" : ""}Registless ID: ${qrValue}\n\nhttps://registless.ai`;
+    // QR payload: JSON string with full profile so partner scan gets real data
+    const myUid = app.sellerUid || authUser?.uid || "";
+    const qrPayload = app.sellerQrPayload || JSON.stringify({
+      uid: myUid,
+      name: app.sellerName || app.buyerName || "",
+      company: app.sellerCompany || app.buyerCompany || "",
+      phone: "",
+      email: authUser?.email || "",
+      address: app.sellerAddress || app.buyerAddress || "",
+    });
+    const qrValue = qrPayload && qrPayload.length > 2 ? qrPayload : null;
+    const shareText  = `Adj hozzá engem a Registless appban!\n\nNévjegy: ${app.sellerName || app.buyerName || ""}\n${app.sellerCompany ? app.sellerCompany + "\n" : ""}Registless ID: ${myUid}\n\nhttps://registless.ai`;
     content = (
       <SafeAreaView style={{ flex: 1, width: "100%" }}>
         <ScrollView contentContainerStyle={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
@@ -552,11 +569,13 @@ export default function App() {
           </Text>
 
           <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 24, shadowColor: "#ff7a1a", shadowOpacity: 0.4, shadowRadius: 24, elevation: 16 }}>
-            {!!qrValue && qrValue.length > 2 ? (
+            {qrValue ? (
               <QRCode value={qrValue} size={220} color="#111" backgroundColor="#fff" />
             ) : (
-              <View style={{ width: 220, height: 220, backgroundColor: "#f0f0f0", borderRadius: 8, justifyContent: "center", alignItems: "center" }}>
-                <Text style={{ color: "#888", fontSize: 12, textAlign: "center" }}>QR generálás...{"\n"}Kérjük várjon</Text>
+              <View style={{ width: 220, height: 220, backgroundColor: "#f5f5f5", borderRadius: 8, justifyContent: "center", alignItems: "center" }}>
+                <Text style={{ color: "#888", fontSize: 13, textAlign: "center", paddingHorizontal: 16 }}>
+                  {"Töltsd ki a Beállításokban a nevedet,\nhogy megjelenjen a QR kód."}
+                </Text>
               </View>
             )}
           </View>
@@ -594,7 +613,14 @@ export default function App() {
         permission={permission}
         requestPermission={requestPermission}
         role={activeRole}
-        onScanned={(data) => {
+        onScanned={(rawData) => {
+          // Parse JSON payload if QR contains JSON, otherwise treat as plain uid
+          let data = {};
+          try {
+            data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+          } catch {
+            data = { uid: rawData, name: "", company: "" };
+          }
           const newContact = {
             id:               `c-${Date.now()}`,
             name:             data.name     || "Ismeretlen",
@@ -723,24 +749,35 @@ export default function App() {
             </View>
           ) : (
             contacts.map((c) => (
-              <TouchableOpacity key={c.id}
-                style={{ backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", flexDirection: "row", alignItems: "center" }}
-                onPress={() => navigate("partnerWorkspace", { contactId: c.id, role: activeRole })}
-              >
-                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,122,26,0.2)", borderWidth: 1, borderColor: "rgba(255,122,26,0.4)", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
-                  <Text style={{ color: "#ff7a1a", fontSize: 18, fontWeight: "bold" }}>{(c.name || "?")[0].toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{c.name}</Text>
-                  {!!c.company && <Text style={{ color: "#888", fontSize: 12, marginTop: 2 }}>{c.company}</Text>}
-                </View>
-                {(c.openItems || []).length > 0 && (
-                  <View style={{ backgroundColor: "rgba(255,122,26,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: "rgba(255,122,26,0.4)", marginRight: 8 }}>
-                    <Text style={{ color: "#ff7a1a", fontSize: 11 }}>{c.openItems.length} nyitott</Text>
+              <View key={c.id} style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", flexDirection: "row", alignItems: "center" }}
+                  onPress={() => navigate("partnerWorkspace", { contactId: c.id, role: activeRole })}
+                >
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,122,26,0.2)", borderWidth: 1, borderColor: "rgba(255,122,26,0.4)", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+                    <Text style={{ color: "#ff7a1a", fontSize: 18, fontWeight: "bold" }}>{(c.name || "?")[0].toUpperCase()}</Text>
                   </View>
-                )}
-                <Text style={{ color: "#888", fontSize: 18 }}>›</Text>
-              </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{c.name}</Text>
+                    {!!c.company && <Text style={{ color: "#888", fontSize: 12, marginTop: 2 }}>{c.company}</Text>}
+                  </View>
+                  {(c.openItems || []).length > 0 && (
+                    <View style={{ backgroundColor: "rgba(255,122,26,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: "rgba(255,122,26,0.4)", marginRight: 8 }}>
+                      <Text style={{ color: "#ff7a1a", fontSize: 11 }}>{c.openItems.length} nyitott</Text>
+                    </View>
+                  )}
+                  <Text style={{ color: "#888", fontSize: 18 }}>›</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ marginLeft: 8, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,50,50,0.15)", borderWidth: 1, borderColor: "rgba(255,50,50,0.3)", justifyContent: "center", alignItems: "center" }}
+                  onPress={() => Alert.alert("Partner törlése", `Biztosan törlöd: ${c.name}?`, [
+                    { text: "Nem", style: "cancel" },
+                    { text: "Törlöm", style: "destructive", onPress: () => app.removeContact?.(c.id) },
+                  ])}
+                >
+                  <Text style={{ fontSize: 18 }}>🗑</Text>
+                </TouchableOpacity>
+              </View>
             ))
           )}
         </ScrollView>

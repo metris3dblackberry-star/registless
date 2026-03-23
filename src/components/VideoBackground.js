@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 
 const VIDEO_URL =
-  'https://res.cloudinary.com/dg6eiiujs/video/upload/v1774218433/REG60_mgmdcq.mp4';
+  'https://res.cloudinary.com/dg6eiiujs/video/upload/v1774263250/Registless99Mbyte_unz6q9.mp4';
 
 export default function VideoBackground({ children }) {
   const [videoError, setVideoError] = useState(false);
