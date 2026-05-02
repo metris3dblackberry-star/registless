@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { StyleSheet, View, Platform } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 
-const VIDEO_URL = 'https://pub-09680686a29d4c62868764ed67285bf6.r2.dev/registless/R-84.9.mp4';
+const VIDEO_URL = 'https://pub-09680686a29d4c62868764ed67285bf6.r2.dev/R-84.9.mp4';
 
 export default function VideoBackground({ children }) {
   const videoRef = useRef(null);
