@@ -5,8 +5,8 @@
 // ─────────────────────────────────────────────────────────────────
 import { Alert, Vibration } from "react-native";
 import { createOrGetChannel } from "../../firebase";
-import { buildInvoiceHtml, calcLine, calcTotals, formatCurrency } from "./invoice";
-import { parseBusinessCard, parseCompanyData, parseInvoice } from "./ocr";
+import { buildInvoiceHtml, calcLine, calcTotals, formatCurrency } from "../services/invoice";
+import { parseBusinessCard, parseCompanyData, parseInvoice } from "../services/ocr";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
@@ -184,8 +184,12 @@ export function applyOcrResult({
 
 // ── Számla kiállítás ──────────────────────────────────────────────
 export async function issueInvoice({
-  contactId, getContactById, addInvoiceToContact,
-  addActivityToContact, nextInvoiceNumber, sellerProfile, taxType,
+  contactId,
+  getContactById,
+  addInvoiceToContact,
+  addActivityToContact,
+  nextInvoiceNumber,
+  sellerProfile,
 }) {
   const contact = getContactById(contactId);
   if (!contact) return;
@@ -198,7 +202,7 @@ export async function issueInvoice({
   const invoiceId = nextInvoiceNumber();
   const date = new Date().toLocaleDateString("hu-HU");
   const tetelek = openItems.map((oi) =>
-    calcLine(oi.serviceName || "Szolgáltatás", 1, oi.nettoAmount || oi.amount || 0)
+    calcLine(oi.serviceName || "Szolgáltatás", 1, oi.netto || oi.nettoAmount || Math.round((oi.amount || 0) / 1.27))
   );
   const totals = calcTotals(tetelek);
 
@@ -222,62 +226,25 @@ export async function issueInvoice({
 
   // PDF generálás
   try {
-   const html = buildInvoiceHtml({
-  seller: sellerProfile,
-  buyer: { name: contact.name, company: contact.company, address: contact.address },
-  items: tetelek,
-  invoiceId,
-  date,
-  taxType: taxType || "kata",
-});
+    const html = buildInvoiceHtml({
+      seller: sellerProfile,
+      buyer: { name: contact.name, company: contact.company, address: contact.address },
+      items: tetelek,
+      invoiceId,
+      date,
+    });
     const { uri } = await Print.printToFileAsync({ html });
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
         mimeType: "application/pdf",
-       dialogTitle: `${taxType === "kata" ? "Bizonylat" : "Számla"}: ${invoiceId}`,
+        dialogTitle: `Számla: ${invoiceId}`,
       });
     }
   } catch (e) {
     console.log("PDF hiba:", e);
   }
 
-  // NAV feltöltés KFT módban
-  if (taxType === "kft") {
-    try {
-      const navResp = await fetch(
-        "https://us-central1-registless.cloudfunctions.net/submitNavInvoice",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            invoiceNumber: invoiceId,
-            seller: sellerProfile,
-            buyer: { name: contact.name, company: contact.company, address: contact.address, taxNumber: contact.taxNumber },
-            items: tetelek,
-          }),
-        }
-      );
-      const navResult = await navResp.json();
-      if (navResult.success) {
-        console.log("[NAV] Feltöltve:", navResult.transactionId);
-        Alert.alert("✅ Számla kiállítva", `${invoiceId} · ${formatCurrency(totals.brutto)}
-
-🏛 NAV: ${navResult.transactionId}`);
-      } else {
-        console.warn("[NAV] Hiba:", navResult.error);
-        Alert.alert("✅ Számla kiállítva", `${invoiceId} · ${formatCurrency(totals.brutto)}
-
-⚠️ NAV feltöltés sikertelen: ${navResult.error}`);
-      }
-    } catch (navErr) {
-      console.warn("[NAV] Hálózati hiba:", navErr.message);
-      Alert.alert("✅ Számla kiállítva", `${invoiceId} · ${formatCurrency(totals.brutto)}
-
-⚠️ NAV hálózati hiba`);
-    }
-  } else {
-    Alert.alert("✅ Számla kiállítva", `${invoiceId} · ${formatCurrency(totals.brutto)}`);
-  }
+  Alert.alert("✅ Számla kiállítva", `${invoiceId} · ${formatCurrency(totals.brutto)}`);
 }
 
 // ── Draft mentés ──────────────────────────────────────────────────

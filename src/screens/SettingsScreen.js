@@ -30,6 +30,7 @@ export default function SettingsScreen({
   // Payment
   selectedPaymentMethod, setSelectedPaymentMethod,
   // Callbacks
+  sellerTaxType, setSellerTaxType,
   onOcr,
   onResetAll,
   onRestartOnboarding,
@@ -37,6 +38,14 @@ export default function SettingsScreen({
   initialSection = null,
 }) {
   const [activeSection, setActiveSection] = useState(initialSection || SECTIONS[0]);
+  
+  // Scroll to initial section on mount
+  React.useEffect(() => {
+    if (initialSection && SECTIONS.includes(initialSection)) {
+      setActiveSection(initialSection);
+      setTimeout(() => scrollToSection(initialSection), 100);
+    }
+  }, [initialSection]);
   const sectionScrollRef = React.useRef(null);
   const screenWidth = Dimensions.get('window').width;
 
@@ -75,6 +84,22 @@ export default function SettingsScreen({
         <Text style={{ color: "#888", fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4 }}>
           💜 Revolut fizetési kéréshez add meg: @felhasználónév
         </Text>
+
+        <Text style={shared.label}>Adórendszer típusa</Text>
+        <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
+          <TouchableOpacity
+            style={[st.roleBtn, sellerTaxType === "kata" && st.roleBtnActive]}
+            onPress={() => setSellerTaxType("kata")}
+          >
+            <Text style={[st.roleBtnText, sellerTaxType === "kata" && { color: colors.accent }]}>KATA (Bizonylat)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[st.roleBtn, sellerTaxType === "kft" && st.roleBtnActive]}
+            onPress={() => setSellerTaxType("kft")}
+          >
+            <Text style={[st.roleBtnText, sellerTaxType === "kft" && { color: colors.accent }]}>KFT (Számla)</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={st.divider} />
         <Text style={[shared.label, { marginTop: 0 }]}>Vevő profilom</Text>

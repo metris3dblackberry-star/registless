@@ -19,7 +19,13 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "NOTIFICATIONS"
+        "NOTIFICATIONS",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "googleServicesFile": "./google-services.json"
     },
@@ -32,18 +38,31 @@
           }
         }
       ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Az app a naptárad időpontjait olvassa."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Az app a helyzetedet használja közeli szolgáltatók kereséséhez."
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "expo-camera",
       "expo-notifications",
       "expo-secure-store",
       "expo-video",
-    
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {
-        "projectId": "08da73b8-650a-4f46-9764-d91b95d2bb29"
+        "projectId": "f176b840-e2af-4a2b-b653-ae9f518cda1c"
       }
-    }
+    },
+    "owner": "starlabss-organization"
   }
 }

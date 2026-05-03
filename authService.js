@@ -1,101 +1,81 @@
-// authService.js — AsyncStorage fake auth (Firebase-mentes)
-// Registless 2026-03-22 checkpoint
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// authService.js — Firebase Auth (Email/Password + Google)
+// @react-native-firebase/auth + @react-native-google-signin/google-signin
+import auth from "@react-native-firebase/auth";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
-const USERS_KEY = "registless_users";
-const SESSION_KEY = "registless_session";
+// Google Sign-In inicializálás — web client ID a Firebase konzolból
+// Project Settings → Your apps → Web app → Client ID
+GoogleSignin.configure({
+  webClientId: "27530670886-hgscl3u1o49cetbf8p9ehkct5e4g2eih.apps.googleusercontent.com", // ← cseréld ki!
+});
 
-// ─────────────────────────────────────────────
-// REGISZTRÁCIÓ
-// ─────────────────────────────────────────────
+// ── Auth state listener ───────────────────────────────────────────
+export function onAuthChange(callback) {
+  return auth().onAuthStateChanged((user) => {
+    callback(user ? {
+      uid:          user.uid,
+      email:        user.email,
+      displayName:  user.displayName,
+      photoURL:     user.photoURL,
+      emailVerified: user.emailVerified,
+    } : null);
+  });
+}
+
+// ── Email + jelszó regisztráció ───────────────────────────────────
 export async function registerWithEmail(email, password, name) {
-  try {
-    const raw = await AsyncStorage.getItem(USERS_KEY);
-    const users = raw ? JSON.parse(raw) : {};
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    if (users[normalizedEmail]) {
-      throw new Error("Ez az email cím már regisztrált.");
-    }
-
-    if (password.length < 6) {
-      throw new Error("A jelszónak legalább 6 karakter hosszúnak kell lennie.");
-    }
-
-    const user = {
-      uid: `uid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      email: normalizedEmail,
-      name: name || normalizedEmail.split("@")[0],
-      password,
-      createdAt: new Date().toISOString(),
-    };
-
-    users[normalizedEmail] = user;
-    await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(user));
-
-    // Jelszó nélküli session objektum visszaadása
-    const { password: _pw, ...safeUser } = user;
-    return safeUser;
-  } catch (error) {
-    throw error;
-  }
-}
-
-// ─────────────────────────────────────────────
-// BEJELENTKEZÉS
-// ─────────────────────────────────────────────
-export async function loginWithEmail(email, password) {
-  try {
-    const raw = await AsyncStorage.getItem(USERS_KEY);
-    const users = raw ? JSON.parse(raw) : {};
-
-    const normalizedEmail = email.toLowerCase().trim();
-    const user = users[normalizedEmail];
-
-    if (!user || user.password !== password) {
-      throw new Error("Hibás email cím vagy jelszó.");
-    }
-
-    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(user));
-
-    const { password: _pw, ...safeUser } = user;
-    return safeUser;
-  } catch (error) {
-    throw error;
-  }
-}
-
-// ─────────────────────────────────────────────
-// JELSZÓ VISSZAÁLLÍTÁS (szimulált)
-// ─────────────────────────────────────────────
-export async function resetPassword(email) {
-  // Fake implementáció — éles verzióban Firebase / SMTP
+  const cred = await auth().createUserWithEmailAndPassword(email.trim(), password);
+  if (name) await cred.user.updateProfile({ displayName: name });
   return {
-    success: true,
-    message: "Ha létezik a fiók, hamarosan megérkezik a visszaállító email.",
+    uid:         cred.user.uid,
+    email:       cred.user.email,
+    displayName: name || email.split("@")[0],
   };
 }
 
-// ─────────────────────────────────────────────
-// JELENLEGI FELHASZNÁLÓ
-// ─────────────────────────────────────────────
-export async function getCurrentUser() {
-  try {
-    const raw = await AsyncStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const user = JSON.parse(raw);
-    const { password: _pw, ...safeUser } = user;
-    return safeUser;
-  } catch {
-    return null;
-  }
+// ── Email + jelszó bejelentkezés ──────────────────────────────────
+export async function loginWithEmail(email, password) {
+  const cred = await auth().signInWithEmailAndPassword(email.trim(), password);
+  return {
+    uid:         cred.user.uid,
+    email:       cred.user.email,
+    displayName: cred.user.displayName,
+  };
 }
 
-// ─────────────────────────────────────────────
-// KIJELENTKEZÉS
-// ─────────────────────────────────────────────
+// ── Google bejelentkezés ──────────────────────────────────────────
+export async function loginWithGoogle() {
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  const { data } = await GoogleSignin.signIn();
+  const googleCred = auth.GoogleAuthProvider.credential(data.idToken);
+  const cred = await auth().signInWithCredential(googleCred);
+  return {
+    uid:         cred.user.uid,
+    email:       cred.user.email,
+    displayName: cred.user.displayName,
+    photoURL:    cred.user.photoURL,
+  };
+}
+
+// ── Jelszó visszaállítás ──────────────────────────────────────────
+export async function resetPassword(email) {
+  await auth().sendPasswordResetEmail(email.trim());
+  return { success: true };
+}
+
+// ── Jelenlegi felhasználó ─────────────────────────────────────────
+export async function getCurrentUser() {
+  const user = auth().currentUser;
+  if (!user) return null;
+  return {
+    uid:         user.uid,
+    email:       user.email,
+    displayName: user.displayName,
+  };
+}
+
+// ── Kijelentkezés ─────────────────────────────────────────────────
 export async function logout() {
-  await AsyncStorage.removeItem(SESSION_KEY);
+  try { await GoogleSignin.signOut(); } catch {}
+  await auth().signOut();
 }

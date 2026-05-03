@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "27530670886",
+    "firebase_url": "https://registless-default-rtdb.europe-west1.firebasedatabase.app",
     "project_id": "registless",
     "storage_bucket": "registless.firebasestorage.app"
   },
@@ -12,7 +13,20 @@
           "package_name": "com.starlabs.registless"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "27530670886-ksigf7ru9vao6c0vfi048a7huo7mllao.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.starlabs.registless",
+            "certificate_hash": "a8677b582e48bf81d9811d1e0f2ab6fd4738e7c6"
+          }
+        },
+        {
+          "client_id": "27530670886-hgscl3u1o49cetbf8p9ehkct5e4g2eih.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD1DxpshaZHuumaa6xCcGqd9iuoHAzOHCE"
@@ -20,7 +34,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "27530670886-hgscl3u1o49cetbf8p9ehkct5e4g2eih.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

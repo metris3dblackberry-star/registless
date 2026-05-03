@@ -1,98 +1,120 @@
 // ─────────────────────────────────────────────────────────────────
-// useAppState.js — Teljes app state + AsyncStorage perzisztencia
+// useAppState.js — App state + AsyncStorage + RTDB szinkron
+// Újratelepítés után Firebase Auth UID alapján visszatölti az adatokat
 // ─────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fromSellerCustomer, fromKapcsolat } from "../models/Contact";
-import { saveUserProfile } from "../../firebase";
+import { rtdb } from "../../firebase";
 
-const STORAGE_KEY = "registless_app_state_v9";
+const STORAGE_KEY    = "registless_app_state_v9";
 const SELLER_UID_KEY = "registless_seller_uid_v1";
-const BUYER_UID_KEY = "registless_buyer_uid_v1";
+const BUYER_UID_KEY  = "registless_buyer_uid_v1";
 
 function makeId(prefix = "id") {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// ── RTDB helpers ─────────────────────────────────────────────────
+async function rtdbSave(uid, data) {
+  if (!uid) return;
+  try {
+    await rtdb.ref(`appState/${uid}`).update({
+      ...data,
+      updatedAt: Date.now(),
+    });
+  } catch (e) {
+    console.log("[RTDB] save error:", e.message);
+  }
+}
+
+async function rtdbLoad(uid) {
+  if (!uid) return null;
+  try {
+    const snap = await rtdb.ref(`appState/${uid}`).once("value");
+    return snap.val();
+  } catch (e) {
+    console.log("[RTDB] load error:", e.message);
+    return null;
+  }
+}
+
 export function useAppState() {
   const [isHydrated, setIsHydrated] = useState(false);
+  const [firebaseUid, setFirebaseUid] = useState(null); // Firebase Auth UID
 
-  // ── UIDs ──────────────────────────────────────────────────────
   const [registlessUid, setRegistlessUid] = useState(null);
-  const [sellerUid, setSellerUid] = useState(null);
-  const [buyerUid, setBuyerUid] = useState(null);
+  const [sellerUid, setSellerUid]         = useState(null);
+  const [buyerUid, setBuyerUid]           = useState(null);
 
-  // ── Seller profil ─────────────────────────────────────────────
-  const [sellerName, setSellerName] = useState("");
-  const [sellerAddress, setSellerAddress] = useState("");
-  const [sellerCompany, setSellerCompany] = useState("");
-  const [sellerTaxNumber, setSellerTaxNumber] = useState("");
+  const [sellerName, setSellerName]               = useState("");
+  const [sellerAddress, setSellerAddress]         = useState("");
+  const [sellerCompany, setSellerCompany]         = useState("");
+  const [sellerTaxNumber, setSellerTaxNumber]     = useState("");
   const [sellerBankAccount, setSellerBankAccount] = useState("");
 
-  // ── Buyer profil ──────────────────────────────────────────────
-  const [buyerName, setBuyerName] = useState("");
+  const [buyerName, setBuyerName]       = useState("");
   const [buyerAddress, setBuyerAddress] = useState("");
   const [buyerCompany, setBuyerCompany] = useState("");
 
-  // ── Contacts (egységes modell) ────────────────────────────────
-  const [contacts, setContacts] = useState([]);
-
-  // ── Invoice ───────────────────────────────────────────────────
+  const [contacts, setContacts]         = useState([]);
   const [invoiceCounter, setInvoiceCounter] = useState(0);
   const invoiceCounterRef = useRef(0);
 
-  // ── Quick services ────────────────────────────────────────────
   const [quickServices, setQuickServices] = useState([
     { id: "qs-1", name: "Személyi edzés", amount: 10000 },
-    { id: "qs-2", name: "Masszázs", amount: 12000 },
-    { id: "qs-3", name: "Konzultáció", amount: 15000 },
+    { id: "qs-2", name: "Masszázs",        amount: 12000 },
+    { id: "qs-3", name: "Konzultáció",     amount: 15000 },
   ]);
 
-  // ── Active service (timer) ────────────────────────────────────
-  const [activeService, setActiveService] = useState(null);
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
-
-  // ── Payment ───────────────────────────────────────────────────
+  const [activeService, setActiveService]             = useState(null);
+  const [receivedInvoices, setReceivedInvoices]       = useState([]); // vevőnek küldött számlák
+  const [hasSeenOnboarding, setHasSeenOnboarding]     = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("revolut");
+  const [sellerTaxType, setSellerTaxType]             = useState("kata");
 
-  // ── Load ──────────────────────────────────────────────────────
+  // ── Adatok beállítása objektumból (RTDB vagy AsyncStorage) ────
+  function applyState(s) {
+    if (!s) return;
+    if (s.sellerName        !== undefined) setSellerName(s.sellerName || "");
+    if (s.sellerAddress     !== undefined) setSellerAddress(s.sellerAddress || "");
+    if (s.sellerCompany     !== undefined) setSellerCompany(s.sellerCompany || "");
+    if (s.sellerTaxNumber   !== undefined) setSellerTaxNumber(s.sellerTaxNumber || "");
+    if (s.sellerBankAccount !== undefined) setSellerBankAccount(s.sellerBankAccount || "");
+    if (s.buyerName         !== undefined) setBuyerName(s.buyerName || "");
+    if (s.buyerAddress      !== undefined) setBuyerAddress(s.buyerAddress || "");
+    if (s.buyerCompany      !== undefined) setBuyerCompany(s.buyerCompany || "");
+
+    let loadedContacts = s.contacts || [];
+    if (loadedContacts.length === 0) {
+      const fromSeller = (s.sellerCustomers || []).map(fromSellerCustomer);
+      const fromBuyer  = (s.kapcsolatok     || []).map(fromKapcsolat);
+      loadedContacts   = [...fromSeller, ...fromBuyer];
+    }
+    setContacts(loadedContacts);
+
+    const counter = Number(s.invoiceCounter || 0);
+    setInvoiceCounter(counter);
+    invoiceCounterRef.current = counter;
+
+    if (s.hasSeenOnboarding !== undefined) setHasSeenOnboarding(s.hasSeenOnboarding || false);
+    if (s.sellerTaxType     !== undefined) setSellerTaxType(s.sellerTaxType || "kata");
+    if (s.quickServices     !== undefined) setQuickServices(s.quickServices || [
+      { id: "qs-1", name: "Személyi edzés", amount: 10000 },
+      { id: "qs-2", name: "Masszázs",        amount: 12000 },
+      { id: "qs-3", name: "Konzultáció",     amount: 15000 },
+    ]);
+  }
+
+  // ── Betöltés induláskor ───────────────────────────────────────
   useEffect(() => {
     async function load() {
       try {
+        // Először AsyncStorage (gyors, offline)
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const s = JSON.parse(raw);
-          setSellerName(s.sellerName || "");
-          setSellerAddress(s.sellerAddress || "");
-          setSellerCompany(s.sellerCompany || "");
-          setSellerTaxNumber(s.sellerTaxNumber || "");
-          setSellerBankAccount(s.sellerBankAccount || "");
-          setBuyerName(s.buyerName || "");
-          setBuyerAddress(s.buyerAddress || "");
-          setBuyerCompany(s.buyerCompany || "");
-
-          // Migráció: régi kettős modell → egységes contacts
-          let loadedContacts = s.contacts || [];
-          if (loadedContacts.length === 0) {
-            const fromSeller = (s.sellerCustomers || []).map(fromSellerCustomer);
-            const fromBuyer = (s.kapcsolatok || []).map(fromKapcsolat);
-            loadedContacts = [...fromSeller, ...fromBuyer];
-          }
-          setContacts(loadedContacts);
-
-          const counter = Number(s.invoiceCounter || 0);
-          setInvoiceCounter(counter);
-          invoiceCounterRef.current = counter;
-
-          setHasSeenOnboarding(s.hasSeenOnboarding || false);
-          setQuickServices(s.quickServices || [
-            { id: "qs-1", name: "Személyi edzés", amount: 10000 },
-            { id: "qs-2", name: "Masszázs", amount: 12000 },
-            { id: "qs-3", name: "Konzultáció", amount: 15000 },
-          ]);
-        }
+        if (raw) applyState(JSON.parse(raw));
       } catch (e) {
-        console.log("Load error:", e);
+        console.log("AsyncStorage load error:", e);
       } finally {
         setIsHydrated(true);
       }
@@ -123,36 +145,57 @@ export function useAppState() {
     initUids();
   }, []);
 
-  // ── Save ──────────────────────────────────────────────────────
+  // ── RTDB betöltés bejelentkezés után ──────────────────────────
+  // Hívd meg: app.syncFromRTDB(authUser.uid) bejelentkezéskor
+  async function syncFromRTDB(uid) {
+    if (!uid) return;
+    setFirebaseUid(uid);
+    try {
+      const rtdbData = await rtdbLoad(uid);
+      if (rtdbData) {
+        console.log("[RTDB] Adatok visszatöltve:", uid);
+        applyState(rtdbData);
+        if (rtdbData.receivedInvoices) setReceivedInvoices(rtdbData.receivedInvoices);
+        // AsyncStorage-t is frissítjük
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(rtdbData));
+      }
+    } catch (e) {
+      console.log("[RTDB] syncFromRTDB error:", e.message);
+    }
+  }
+
+  // ── Mentés (AsyncStorage + RTDB) ─────────────────────────────
+  const saveTimeoutRef = useRef(null);
+
   useEffect(() => {
     if (!isHydrated) return;
-    async function save() {
-      try {
-        const payload = {
-          sellerName, sellerAddress, sellerCompany, sellerTaxNumber, sellerBankAccount,
-          buyerName, buyerAddress, buyerCompany,
-          contacts: contacts || [],
-          invoiceCounter: invoiceCounter || 0,
-          quickServices: quickServices || [],
-          hasSeenOnboarding: hasSeenOnboarding || false,
-        };
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 
-        if (sellerUid && sellerName) {
-          saveUserProfile(sellerUid, { role: "seller", sellerName, sellerAddress, sellerCompany, sellerTaxNumber, sellerBankAccount })
-            .catch(() => {});
-        }
-        if (buyerUid && buyerName) {
-          saveUserProfile(buyerUid, { role: "buyer", buyerName, buyerAddress, buyerCompany })
-            .catch(() => {});
-        }
-      } catch (e) {
-        console.log("Save error:", e);
-      }
+    const payload = {
+      sellerName, sellerAddress, sellerCompany, sellerTaxNumber, sellerBankAccount,
+      buyerName, buyerAddress, buyerCompany,
+      contacts: contacts || [],
+      invoiceCounter: invoiceCounter || 0,
+      quickServices: quickServices || [],
+      hasSeenOnboarding: hasSeenOnboarding || false,
+      sellerTaxType: sellerTaxType || "kata",
+    };
+
+    // AsyncStorage — azonnal
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch(() => {});
+
+    // RTDB — debounced (ne írjon minden karakter után)
+    if (firebaseUid) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        rtdbSave(firebaseUid, payload);
+      }, 1500);
     }
-    save();
-  }, [isHydrated, sellerName, sellerAddress, sellerCompany, sellerTaxNumber, sellerBankAccount,
-      buyerName, buyerAddress, buyerCompany, contacts, invoiceCounter, quickServices]);
+  }, [
+    isHydrated, firebaseUid,
+    sellerName, sellerAddress, sellerCompany, sellerTaxNumber, sellerBankAccount,
+    buyerName, buyerAddress, buyerCompany,
+    contacts, invoiceCounter, quickServices, sellerTaxType, hasSeenOnboarding,
+  ]);
 
   // ── Invoice counter ───────────────────────────────────────────
   function nextInvoiceNumber() {
@@ -167,12 +210,10 @@ export function useAppState() {
     () => contacts.filter((c) => c.myRoleInRelation === "seller"),
     [contacts]
   );
-
   const getBuyerContacts = useCallback(
     () => contacts.filter((c) => c.myRoleInRelation === "buyer"),
     [contacts]
   );
-
   const getContactById = useCallback(
     (id) => contacts.find((c) => c.id === id) || null,
     [contacts]
@@ -193,25 +234,13 @@ export function useAppState() {
     const newContact = {
       id: makeId("contact"),
       role: "contact",
-      name: "",
-      company: "",
-      address: "",
-      email: "",
-      phone: "",
-      taxNumber: "",
-      bankAccount: "",
+      name: "", company: "", address: "", email: "", phone: "",
+      taxNumber: "", bankAccount: "",
       registlessUid: params.registlessUid || makeId("uid-ocr"),
-      qrId: null,
-      myRoleInRelation: "seller",
-      activities: [],
-      appointments: [],
-      invoices: [],
-      openItems: [],
-      bookingRequests: [],
-      calendar: [],
-      drafts: {},
-      createdAt: Date.now(),
-      lastActivityAt: Date.now(),
+      qrId: null, myRoleInRelation: "seller",
+      activities: [], appointments: [], invoices: [],
+      openItems: [], bookingRequests: [], calendar: [], drafts: {},
+      createdAt: Date.now(), lastActivityAt: Date.now(),
       ...params,
     };
     setContacts((prev) => [newContact, ...prev]);
@@ -229,14 +258,7 @@ export function useAppState() {
   }
 
   function addActivityToContact(contactId, activity) {
-    const act = {
-      id: makeId("act"),
-      type: "general",
-      text: "",
-      meta: {},
-      createdAt: Date.now(),
-      ...activity,
-    };
+    const act = { id: makeId("act"), type: "general", text: "", meta: {}, createdAt: Date.now(), ...activity };
     setContacts((prev) =>
       prev.map((c) =>
         c.id === contactId
@@ -250,13 +272,7 @@ export function useAppState() {
     setContacts((prev) =>
       prev.map((c) =>
         c.id === contactId
-          ? {
-              ...c,
-              invoices: [invoice, ...(c.invoices || [])],
-              // Gyűjtőszámla kiállításakor az összes nyitott tétel törlődik
-              openItems: [],
-              lastActivityAt: Date.now(),
-            }
+          ? { ...c, invoices: [invoice, ...(c.invoices || [])], openItems: [], lastActivityAt: Date.now() }
           : c
       )
     );
@@ -282,80 +298,57 @@ export function useAppState() {
     );
   }
 
-  // ── Quick services ────────────────────────────────────────────
   function addQuickService(name, amount) {
-    const exists = quickServices.some(
-      (qs) => qs.name.toLowerCase() === name.toLowerCase()
-    );
+    const exists = quickServices.some((qs) => qs.name.toLowerCase() === name.toLowerCase());
     if (exists) return;
-    setQuickServices((prev) => [
-      ...prev,
-      { id: makeId("qs"), name, amount: Number(amount || 0) },
-    ]);
+    setQuickServices((prev) => [...prev, { id: makeId("qs"), name, amount: Number(amount || 0) }]);
   }
 
   function removeQuickService(id) {
     setQuickServices((prev) => prev.filter((qs) => qs.id !== id));
   }
 
-  // ── Seller QR payload ─────────────────────────────────────────
   function sellerQrPayload() {
     return JSON.stringify({
-      t: "seller",
-      id: sellerUid || "seller-main",
-      n: sellerName || "",
-      a: sellerAddress || "",
-      c: sellerCompany || "",
-      tx: sellerTaxNumber || "",
-      b: sellerBankAccount || "",
+      t: "seller", id: sellerUid || "seller-main",
+      n: sellerName || "", a: sellerAddress || "",
+      c: sellerCompany || "", tx: sellerTaxNumber || "", b: sellerBankAccount || "",
     });
   }
 
-  // ── Buyer QR payload ──────────────────────────────────────────
   function buyerQrPayload() {
     return JSON.stringify({
-      t: "buyer",
-      id: buyerUid || "buyer-main",
-      n: buyerName || "",
-      a: buyerAddress || "",
-      c: buyerCompany || "",
+      t: "buyer", id: buyerUid || "buyer-main",
+      n: buyerName || "", a: buyerAddress || "", c: buyerCompany || "",
     });
   }
 
-  function markOnboardingSeen() {
-    setHasSeenOnboarding(true);
-  }
+  function markOnboardingSeen() { setHasSeenOnboarding(true); }
 
   return {
     isHydrated,
-    // UIDs
-    registlessUid, sellerUid, buyerUid,
-    // Seller
+    registlessUid, sellerUid, buyerUid, firebaseUid,
     sellerName, setSellerName,
     sellerAddress, setSellerAddress,
     sellerCompany, setSellerCompany,
     sellerTaxNumber, setSellerTaxNumber,
     sellerBankAccount, setSellerBankAccount,
-    // Buyer
     buyerName, setBuyerName,
     buyerAddress, setBuyerAddress,
     buyerCompany, setBuyerCompany,
-    // Contacts
     contacts, setContacts,
     getSellerContacts, getBuyerContacts, getContactById,
     addContact, updateContact, deleteContact,
     addActivityToContact, addInvoiceToContact,
     addOpenItemToContact, addAppointmentToContact,
-    // Invoice
     invoiceCounter, nextInvoiceNumber,
-    // Quick services
     quickServices, addQuickService, removeQuickService,
-    // Active service
     activeService, setActiveService,
-    // Payment
     selectedPaymentMethod, setSelectedPaymentMethod,
     hasSeenOnboarding, markOnboardingSeen,
-    // QR payloads
+    sellerTaxType, setSellerTaxType,
     sellerQrPayload, buyerQrPayload,
+    receivedInvoices,
+    syncFromRTDB, // ← ezt hívd meg bejelentkezés után!
   };
 }

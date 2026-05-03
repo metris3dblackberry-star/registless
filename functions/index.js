@@ -1,3 +1,4 @@
+// deploy 2026-03-27
 // ─────────────────────────────────────────────────────────────────
 // functions/index.js — Registless Firebase Cloud Functions v2
 // firebase-functions v6 kompatibilis
@@ -7,6 +8,9 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin  = require("firebase-admin");
 const Stripe = require("stripe");
+const { navTestUpload, submitNavInvoice } = require("./navService");
+exports.navTestUpload = navTestUpload;
+exports.submitNavInvoice = submitNavInvoice;
 
 admin.initializeApp();
 
@@ -208,11 +212,74 @@ exports.ocrAnalyze = onRequest(
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
     try {
-      const { text, prompt } = req.body;
-      if (!text && !prompt) { res.status(400).json({ error: "Szöveg szükséges." }); return; }
+      const { text, prompt, image, type, query, lat, lon, radius } = req.body;
 
       const anthropicKey = process.env.ANTHROPIC_API_KEY;
       if (!anthropicKey) { res.status(500).json({ error: "ANTHROPIC_API_KEY nincs beállítva." }); return; }
+
+      // ── Helyi keresés ág ─────────────────────────────────────────
+      if (type === "search") {
+        if (!query) { res.status(400).json({ error: "Query szükséges." }); return; }
+        const searchPrompt = `Keress nekem "${query}" szolgáltatót ${radius || 4} km-es körzetben, koordináták: ${lat}, ${lon} (Budapest környéke).
+
+Adj vissza 5 valószerű találatot JSON tömbként, CSAK JSON-t, semmi más szöveg:
+[
+  {
+    "name": "Cégnév",
+    "type": "${query}",
+    "address": "Budapest, Utca 1.",
+    "phone": "+36 30 123 4567",
+    "distance": "1.2 km",
+    "rating": 4.5,
+    "isRegistless": false,
+    "description": "Rövid leírás"
+  }
+]`;
+        const searchResp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": anthropicKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1024,
+            messages: [{ role: "user", content: searchPrompt }],
+          }),
+        });
+        const searchData = await searchResp.json();
+        const raw = searchData?.content?.[0]?.text || "[]";
+        try {
+          const clean = raw.replace(/```json|```/g, "").trim();
+          res.status(200).json(JSON.parse(clean));
+        } catch {
+          res.status(200).json([]);
+        }
+        return;
+      }
+
+      if (!text && !prompt && !image) { res.status(400).json({ error: "Szöveg vagy kép szükséges." }); return; }
+
+      // Ha van base64 kép, image content block-ként küldjük
+      let messageContent;
+      if (image) {
+        // image = "data:image/jpeg;base64,..." formátumban érkezik
+        const base64Data = image.includes(",") ? image.split(",")[1] : image;
+        const mediaType = image.includes("png") ? "image/png" : "image/jpeg";
+        messageContent = [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: base64Data }
+          },
+          {
+            type: "text",
+            text: "Ez egy névjegy vagy dokumentum képe. Olvasd ki belőle az adatokat és add vissza PONTOSAN ebben a formátumban (csak amit megtalálsz):\nNA: <teljes név>\nTE: <telefonszám>\nEM: <email>\nAD: <cím>\nTX: <adószám>\nBA: <bankszámlaszám>\n\nCsak a megtalált adatokat add vissza, más szöveget ne!"
+          }
+        ];
+      } else {
+        messageContent = prompt || text;
+      }
 
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -224,7 +291,7 @@ exports.ocrAnalyze = onRequest(
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 1024,
-          messages: [{ role: "user", content: prompt || text }],
+          messages: [{ role: "user", content: messageContent }],
         }),
       });
 
@@ -261,11 +328,14 @@ exports.sendConfirmationEmail = onRequest(
       const gmailUser   = process.env.GMAIL_USER;
       const gmailPass   = process.env.GMAIL_PASS;
 
-      if (!gmailUser || !gmailPass) throw new Error("GMAIL_USER vagy GMAIL_PASS nincs beállítva!");
+      if (!gmailUser || !gmailPass) throw new Error("GMAIL_USER vagy GMAIL_PASS nincs beállítva! Állítsd be a functions/.env fájlban.");
 
       const transporter = nodemailer.createTransport({
-        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
         auth: { user: gmailUser, pass: gmailPass },
+        tls: { rejectUnauthorized: false },
       });
 
       const htmlBody = `

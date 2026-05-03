@@ -8,6 +8,7 @@ import * as ImagePicker from "expo-image-picker";
 import {
   View, Text, ScrollView, TouchableOpacity, Image,
   KeyboardAvoidingView, Platform, StyleSheet, TextInput, Alert, Keyboard,
+  Linking, Modal, Clipboard,
 } from "react-native";
 import { colors } from "../theme/colors";
 import { shared } from "../theme/styles";
@@ -15,6 +16,7 @@ import { formatCurrency } from "../services/invoice";
 import { useChat } from "../hooks/useChat";
 import { getChannelId } from "../models/Contact";
 import { ActivityType } from "../services/coordinator";
+import { rtdb } from "../../firebase";
 
 const TABS = [
   { id: "activity", label: "Aktivitás", icon: "📋" },
@@ -54,16 +56,19 @@ export default function PartnerWorkspace({
   myUid,
   partnerUid,
   myRole = "seller",
+  initialTab = "activity",
   onBack,
   onStartService,
   onNewBooking,
   onAcceptBooking,
   onIssueInvoice,
   onPayment,
+  onSendPaymentReminder,
   onMessageSent,
   onInvoicePaid,
+  onRemoveOpenItem,
 }) {
-  const [activeTab, setActiveTab] = useState("activity");
+  const [activeTab, setActiveTab] = useState(initialTab || "activity");
   const [msgText, setMsgText] = useState("");
   const [kbHeight, setKbHeight] = useState(0);
   const scrollRef = useRef(null);
@@ -93,10 +98,8 @@ export default function PartnerWorkspace({
     }
   }
 
-  const channelId = getChannelId(
-    myRole === "seller" ? myUid : partnerUid,
-    myRole === "seller" ? partnerUid : myUid
-  );
+  // Channel mindig a két UID sort()-ja alapján — roletól független
+  const channelId = getChannelId(myUid, partnerUid);
   const { messages, send, sending } = useChat(myUid, partnerUid);
 
   if (!contact) return null;
@@ -223,6 +226,61 @@ export default function PartnerWorkspace({
   }
 
   // ── Üzenet tab ────────────────────────────────────────────────
+  const [selectedMsg, setSelectedMsg] = useState(null);
+
+  function handleLongPress(msg) {
+    setSelectedMsg(msg);
+  }
+
+  const [editingMsg, setEditingMsg] = useState(null);
+  const [editText, setEditText] = useState("");
+
+  function handleMsgAction(action, msg) {
+    setSelectedMsg(null);
+    if (action === "copy") {
+      if (msg.type === "image") { Alert.alert("ℹ️", "Kép nem másolható szövegként."); return; }
+      Clipboard.setString(msg.text || "");
+      Alert.alert("✅ Másolva", "Üzenet a vágólapon.");
+    } else if (action === "edit") {
+      if (msg.type === "image") { Alert.alert("ℹ️", "Kép nem módosítható."); return; }
+      setEditText(msg.text || "");
+      setEditingMsg(msg);
+      return;
+    } else if (action === "delete") {
+      Alert.alert("Törlés", "Biztosan törlöd ezt az üzenetet?", [
+        { text: "Mégse", style: "cancel" },
+        { text: "Törlés", style: "destructive", onPress: () => {
+          try {
+            const chatId = [myUid, partnerUid].sort().join("_");
+            rtdb.ref(`chats/${chatId}/messages/${msg.id}`).remove();
+          } catch(e) { console.warn("Törlési hiba:", e.message); }
+        }},
+      ]);
+    }
+  }
+
+  function renderTextWithLinks(text) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    return (
+      <Text style={ws.bubbleText}>
+        {parts.map((part, i) =>
+          urlRegex.test(part) ? (
+            <Text
+              key={i}
+              style={{ color: "#4fc3f7", textDecorationLine: "underline" }}
+              onPress={() => Linking.openURL(part).catch(() => {})}
+            >
+              {part}
+            </Text>
+          ) : (
+            <Text key={i}>{part}</Text>
+          )
+        )}
+      </Text>
+    );
+  }
+
   function renderChat() {
     if (!myUid || !partnerUid) {
       return (
@@ -237,49 +295,136 @@ export default function PartnerWorkspace({
     }
 
     return (
-      <ScrollView
-        ref={scrollRef}
-        style={{ flex: 1, width: "100%" }}
-        contentContainerStyle={{ padding: 8, flexGrow: 1, paddingBottom: 16 }}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-        keyboardShouldPersistTaps="handled"
-      >
-        {messages.length === 0 ? (
-          <View style={[shared.card, { marginTop: 16, alignItems: "center" }]}>
-            <Text style={{ fontSize: 32, marginBottom: 8 }}>💬</Text>
-            <Text style={[shared.value, { textAlign: "center" }]}>
-              Még nincs üzenet. Írj az első üzenetet!
-            </Text>
-          </View>
-        ) : (
-          messages.map((msg) => {
-            const isMine = msg.senderUid === myUid;
-            return (
-              <View key={msg.id} style={{ width: "100%", marginBottom: 8 }}>
-                <Text style={[ws.msgLabel, { textAlign: isMine ? "right" : "left" }]}>
-                  {isMine ? "ÉN" : contact.name}
-                </Text>
-                <View style={[ws.bubble, isMine ? ws.bubbleMine : ws.bubbleTheirs]}>
-                  {msg.type === "image" ? (
-                    <Image
-                      source={{ uri: msg.text }}
-                      style={{ width: 200, height: 200, borderRadius: 12 }}
-                      resizeMode="cover"
-                    />
-                  ) : msg.type === "invoice" ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={{ fontSize: 20 }}>📄</Text>
-                      <Text style={[ws.bubbleText, { color: colors.accent }]}>{msg.text}</Text>
-                    </View>
-                  ) : (
-                    <Text style={ws.bubbleText}>{msg.text}</Text>
-                  )}
-                </View>
+      <>
+        {/* Hosszú nyomás modal */}
+        <Modal visible={!!selectedMsg} transparent animationType="fade" onRequestClose={() => setSelectedMsg(null)}>
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" }}
+            onPress={() => setSelectedMsg(null)}
+          >
+            <View style={{ backgroundColor: "#1a1a1a", borderRadius: 20, padding: 8, width: 240, borderWidth: 1, borderColor: "#333" }}>
+              <Text style={{ color: "#888", fontSize: 12, textAlign: "center", padding: 8, marginBottom: 4 }}>
+                {selectedMsg?.text?.substring(0, 40)}{selectedMsg?.text?.length > 40 ? "..." : ""}
+              </Text>
+              {[
+                { icon: "📋", label: "Másolás", action: "copy" },
+                { icon: "✏️", label: "Módosítás", action: "edit" },
+                { icon: "🗑️", label: "Törlés", action: "delete" },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.action}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 12 }}
+                  onPress={() => handleMsgAction(item.action, selectedMsg)}
+                >
+                  <Text style={{ fontSize: 20 }}>{item.icon}</Text>
+                  <Text style={{ color: item.action === "delete" ? "#f44336" : "#fff", fontSize: 16 }}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Módosítás modal */}
+        <Modal visible={!!editingMsg} transparent animationType="slide" onRequestClose={() => setEditingMsg(null)}>
+          <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={0}
+          >
+            <TouchableOpacity style={{ flex: 1 }} onPress={() => setEditingMsg(null)} activeOpacity={1} />
+            <View style={{ backgroundColor: "#1a1a1a", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, borderWidth: 1, borderColor: "#333" }}>
+              <Text style={{ color: "#888", fontSize: 13, marginBottom: 12 }}>Üzenet módosítása</Text>
+              <TextInput
+                style={{ backgroundColor: "#111", borderRadius: 12, padding: 12, color: "#fff", fontSize: 15, borderWidth: 1, borderColor: "#333", marginBottom: 12, minHeight: 60 }}
+                value={editText}
+                onChangeText={setEditText}
+                multiline
+                autoFocus
+              />
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 12, padding: 14, alignItems: "center" }}
+                  onPress={() => setEditingMsg(null)}
+                >
+                  <Text style={{ color: "#888" }}>Mégse</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: "rgba(255,122,26,0.2)", borderRadius: 12, padding: 14, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,122,26,0.4)" }}
+                  onPress={async () => {
+                    if (!editingMsg || !editText.trim()) return;
+                    const _chatId = [myUid, partnerUid].sort().join("_");
+                    try {
+                      await rtdb.ref(`chats/${_chatId}/messages/${editingMsg.id}`).update({ text: editText.trim(), edited: true, timestamp: Date.now() });
+                    } catch(e) {
+                      Alert.alert("Hiba", "Nem sikerült menteni: " + e.message);
+                      return;
+                    }
+                    // Popup bezárása MENTÉS után
+                    setEditingMsg(null);
+                    setEditText("");
+                  }}
+                >
+                  <Text style={{ color: "#ff7a1a", fontWeight: "bold" }}>Mentés</Text>
+                </TouchableOpacity>
               </View>
-            );
-          })
-        )}
-      </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1, width: "100%" }}
+          contentContainerStyle={{ padding: 8, flexGrow: 1, paddingBottom: 16 }}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          keyboardShouldPersistTaps="handled"
+        >
+          {messages.length === 0 ? (
+            <View style={[shared.card, { marginTop: 16, alignItems: "center" }]}>
+              <Text style={{ fontSize: 32, marginBottom: 8 }}>💬</Text>
+              <Text style={[shared.value, { textAlign: "center" }]}>
+                Még nincs üzenet. Írj az első üzenetet!
+              </Text>
+            </View>
+          ) : (
+            messages.map((msg) => {
+              const isMine = (msg.senderUid === myUid) || (msg.senderId === myUid);
+              return (
+                <TouchableOpacity
+                  key={msg.id}
+                  style={{ width: "100%", marginBottom: 8, alignItems: isMine ? "flex-end" : "flex-start" }}
+                  onLongPress={() => handleLongPress(msg)}
+                  delayLongPress={400}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[ws.msgLabel, { textAlign: isMine ? "right" : "left" }]}>
+                    {isMine ? "ÉN" : contact.name}
+                  </Text>
+                  <View style={[ws.bubble, isMine ? ws.bubbleMine : ws.bubbleTheirs]}>
+                    {msg.type === "image" ? (
+                      msg.text ? (
+                        <Image
+                          source={{ uri: msg.text }}
+                          style={{ width: 200, height: 200, borderRadius: 12 }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Text style={[ws.bubbleText, { color: "#888" }]}>🖼️ Kép nem tölthető be</Text>
+                      )
+                    ) : msg.type === "invoice" ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={{ fontSize: 20 }}>📄</Text>
+                        <Text style={[ws.bubbleText, { color: colors.accent }]}>{msg.text}</Text>
+                      </View>
+                    ) : (
+                      renderTextWithLinks(msg.text || "")
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      </>
     );
   }
 
@@ -293,6 +438,40 @@ export default function PartnerWorkspace({
           <TouchableOpacity style={[shared.btnPrimary, { marginBottom: 16 }]} onPress={onNewBooking}>
             <Text style={shared.btnTextPrimary}>📅  Időpont kérése</Text>
           </TouchableOpacity>
+        )}
+
+        {/* Vevő módban: eladó által kiállított számlák */}
+        {myRole === "buyer" && invoices.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <Text style={[shared.label, { marginBottom: 8 }]}>📄 Számláim</Text>
+            {invoices.map((inv) => (
+              <View key={inv.id} style={[shared.card, { marginBottom: 8, borderColor: inv.statusz === "PAID" ? "rgba(76,175,80,0.4)" : colors.borderSubtle }]}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[shared.value, { fontWeight: "bold" }]}>{inv.id}</Text>
+                    <Text style={shared.labelSmall}>{inv.datum}</Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end", gap: 4 }}>
+                    <Text style={[shared.value, { color: colors.accent, fontWeight: "bold" }]}>
+                      {formatCurrency(inv.bruttoOsszesen || 0)}
+                    </Text>
+                    {inv.statusz === "PAID" ? (
+                      <View style={{ backgroundColor: "rgba(76,175,80,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: "rgba(76,175,80,0.4)" }}>
+                        <Text style={{ color: "#4CAF50", fontSize: 11, fontWeight: "bold" }}>✓ FIZETVE</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={{ backgroundColor: "rgba(255,122,26,0.15)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: colors.accentBorder }}
+                        onPress={() => onPayment?.(inv.id)}
+                      >
+                        <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "bold" }}>💳 Fizetés</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
         )}
 
         {/* Booking kérelmek elfogadása - seller oldalon */}
@@ -399,9 +578,37 @@ export default function PartnerWorkspace({
                 </Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={shared.btnOutline} onPress={onPayment}>
-              <Text style={shared.btnTextSecondary}>💳  Fizetési kérés küldése</Text>
-            </TouchableOpacity>
+            {myRole === "buyer" ? (
+              <TouchableOpacity style={shared.btnOutline} onPress={() => onPayment?.()}>
+                <Text style={shared.btnTextSecondary}>💳  Fizetési kérés küldése</Text>
+              </TouchableOpacity>
+            ) : (
+              invoices.filter(i => i.statusz !== "PAID").length > 0 ? (
+                <TouchableOpacity
+                  style={{ backgroundColor: "rgba(255,122,26,0.1)", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "rgba(255,122,26,0.4)", alignItems: "center" }}
+                  onPress={() => onSendPaymentReminder?.(invoices.filter(i => i.statusz !== "PAID"))}
+                >
+                  <Text style={{ color: "#ff7a1a", fontSize: 14, fontWeight: "700" }}>
+                    📨  Fizetési emlékeztető küldése
+                  </Text>
+                  <Text style={{ color: "#888", fontSize: 12, marginTop: 3 }}>
+                    {formatCurrency(invoices.filter(i => i.statusz !== "PAID").reduce((s,i) => s + Number(i.bruttoOsszesen||0), 0))} · Registless üzenet
+                  </Text>
+                </TouchableOpacity>
+              ) : openAmount > 0 ? (
+                <TouchableOpacity
+                  style={{ backgroundColor: "rgba(255,122,26,0.1)", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "rgba(255,122,26,0.4)", alignItems: "center" }}
+                  onPress={() => onSendPaymentReminder?.([])}
+                >
+                  <Text style={{ color: "#ff7a1a", fontSize: 14, fontWeight: "700" }}>
+                    📨  Fizetési emlékeztető küldése
+                  </Text>
+                  <Text style={{ color: "#888", fontSize: 12, marginTop: 3 }}>
+                    {formatCurrency(openAmount)} · Registless üzenet
+                  </Text>
+                </TouchableOpacity>
+              ) : null
+            )}
           </View>
         )}
 
@@ -415,9 +622,22 @@ export default function PartnerWorkspace({
                   <Text style={shared.value}>{oi.serviceName || "Szolgáltatás"}</Text>
                   <Text style={shared.labelSmall}>{oi.datum || ""} {oi.ido || ""}</Text>
                 </View>
-                <Text style={[shared.value, { color: colors.accent, fontWeight: "bold" }]}>
+                <Text style={[shared.value, { color: colors.accent, fontWeight: "bold", marginRight: 8 }]}>
                   {formatCurrency(oi.brutto || oi.amount || 0)}
                 </Text>
+                <TouchableOpacity
+                  style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,50,50,0.15)", borderWidth: 1, borderColor: "rgba(255,50,50,0.3)", justifyContent: "center", alignItems: "center" }}
+                  onPress={() => Alert.alert(
+                    "Tétel törlése",
+                    `Biztosan törlöd: ${oi.serviceName}?`,
+                    [
+                      { text: "Nem", style: "cancel" },
+                      { text: "Törlöm", style: "destructive", onPress: () => onRemoveOpenItem?.(oi.id) },
+                    ]
+                  )}
+                >
+                  <Text style={{ fontSize: 14 }}>🗑</Text>
+                </TouchableOpacity>
               </View>
             ))}
           </>
@@ -445,9 +665,9 @@ export default function PartnerWorkspace({
                     ) : (
                       <TouchableOpacity
                         style={{ backgroundColor: "rgba(255,122,26,0.15)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: colors.accentBorder }}
-                        onPress={() => onPayment?.(inv.id)}
+                        onPress={() => onSendPaymentReminder?.([inv])}
                       >
-                        <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "bold" }}>💳 Fizetés</Text>
+                        <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "bold" }}>📨 Emlékeztető</Text>
                       </TouchableOpacity>
                     )}
                   </View>

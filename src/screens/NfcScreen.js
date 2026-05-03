@@ -101,7 +101,7 @@ export default function NfcScreen({
   const cfg = statusConfig[status] || statusConfig.idle;
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+     <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
       <View style={st.container}>
 
         {/* Header */}
@@ -219,6 +219,6 @@ const st = StyleSheet.create({
     marginBottom: 6,
   },
   btnRow: {
-    flexDirection: "row", gap: 12, width: "100%", marginTop: 8,
+    btnRow: { flexDirection: "row", gap: 12, width: "100%", marginTop: 8, marginBottom: 25 },
   },
 });

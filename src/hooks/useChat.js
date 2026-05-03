@@ -1,35 +1,23 @@
+// useChat.js — @react-native-firebase natív SDK
 import { useState, useEffect, useCallback, useRef } from "react";
 import { rtdb } from "../../firebase";
 import {
   encryptMsg, decryptMsg, getPublicKey, getPrivateKey,
 } from "../services/cryptoService";
 
-let firebaseRef     = null;
-let firebasePush    = null;
-let firebaseOnValue = null;
-let firebaseOff     = null;
-
-try {
-  const fbDb  = require("firebase/database");
-  firebaseRef     = fbDb.ref;
-  firebasePush    = fbDb.push;
-  firebaseOnValue = fbDb.onValue;
-  firebaseOff     = fbDb.off;
-} catch (e) {
-  console.warn("Firebase Realtime DB import hiba:", e.message);
-}
-
 function buildChatId(uid1, uid2) {
   return [uid1, uid2].sort().join("_");
 }
 
 export function useChat(myUid, partnerUid) {
+  console.log("🔍 useChat myUid=" + (myUid||"null") + " partnerUid=" + (partnerUid||"null") + " chatId=" + buildChatId(myUid||"a", partnerUid||"b"));
+  
   const [messages, setMessages] = useState([]);
   const [sending,  setSending]  = useState(false);
   const [error,    setError]    = useState(null);
 
-  const chatId    = buildChatId(myUid || "a", partnerUid || "b");
-  const keyCache  = useRef({});
+  const chatId   = buildChatId(myUid || "a", partnerUid || "b");
+  const keyCache = useRef({});
   const myPrivRef = useRef(null);
 
   // ── Kulcsok előtöltése ──────────────────────────────────────────
@@ -57,11 +45,11 @@ export function useChat(myUid, partnerUid) {
 
   // ── Üzenetek figyelése ──────────────────────────────────────────
   useEffect(() => {
-    if (!myUid || !partnerUid || !rtdb || !firebaseRef || !firebaseOnValue) return;
+    if (!myUid || !partnerUid) return;
 
     let dbRef;
     try {
-      dbRef = firebaseRef(rtdb, `chats/${chatId}/messages`);
+     dbRef = rtdb.ref(`chats/${chatId}/messages`);
     } catch (e) {
       console.warn("Firebase ref hiba:", e.message);
       return;
@@ -100,12 +88,12 @@ export function useChat(myUid, partnerUid) {
     };
 
     try {
-      firebaseOnValue(dbRef, handleSnapshot);
+      dbRef.on("value", handleSnapshot);
     } catch (e) {
-      console.warn("Firebase onValue hiba:", e.message);
+      console.warn("Firebase on hiba:", e.message);
     }
     return () => {
-      try { firebaseOff && firebaseOff(dbRef); } catch (e) {}
+      try { dbRef.off("value", handleSnapshot); } catch (e) {}
     };
   }, [chatId, myUid, partnerUid]);
 
@@ -113,32 +101,30 @@ export function useChat(myUid, partnerUid) {
   const send = useCallback(async (content, type = "text") => {
     if (!content || sending) return;
 
-    // Optimistic update — azonnal megjelenik
     const optimisticId = `local-${Date.now()}`;
-    const optimisticMsg = {
-      id:        optimisticId,
-      text:      content,
+    setMessages(prev => [...prev, {
+      id: optimisticId,
+      text: content,
       senderUid: myUid,
       timestamp: Date.now(),
       type,
       encrypted: false,
-    };
-    setMessages(prev => [...prev, optimisticMsg]);
+    }]);
     setSending(true);
 
-    // Ha nincs Firebase → marad lokálisan
-    if (!rtdb || !firebaseRef || !firebasePush) {
-      setSending(false);
-      return;
-    }
-
     try {
-      const dbRef        = firebaseRef(rtdb, `chats/${chatId}/messages`);
-      const recipientPub = keyCache.current[partnerUid] ?? await getPublicKey(partnerUid);
-      const myPriv       = myPrivRef.current             ?? await getPrivateKey();
-
+      const dbRef = rtdb.ref(`chats/${chatId}/messages`);
+      // ÚJ:
+	let recipientPub = keyCache.current[partnerUid] ?? null;
+	let myPriv = myPrivRef.current ?? null;
+	try {
+	  if (!recipientPub) recipientPub = await getPublicKey(partnerUid);
+	  if (!myPriv) myPriv = await getPrivateKey();
+} catch (e) {
+  console.warn("Kulcs lekérés sikertelen, titkosítás nélkül küld:", e.message);
+}
       if (!recipientPub || !myPriv) {
-        await firebasePush(dbRef, {
+        await dbRef.push({
           text: content, senderId: myUid, senderUid: myUid,
           timestamp: Date.now(), encrypted: false, type,
         });
@@ -146,15 +132,13 @@ export function useChat(myUid, partnerUid) {
         if (!keyCache.current[partnerUid]) keyCache.current[partnerUid] = recipientPub;
         if (!myPrivRef.current)            myPrivRef.current             = myPriv;
         const { ciphertext, nonce } = encryptMsg(content, recipientPub, myPriv);
-        await firebasePush(dbRef, {
+        await dbRef.push({
           ciphertext, nonce, senderId: myUid, senderUid: myUid,
           timestamp: Date.now(), encrypted: true, type,
         });
       }
-      // Firebase-ből jön vissza a valódi üzenet → optimistic törlése
       setMessages(prev => prev.filter(m => m.id !== optimisticId));
     } catch (e) {
-      // Firebase sikertelen → optimistic marad lokálisan
       console.warn("Firebase push sikertelen, lokálisan maradt:", e.message);
     } finally {
       setSending(false);

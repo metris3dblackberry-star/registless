@@ -44,7 +44,7 @@ export function generateInvoiceNumber(counter) {
   return `RGTL-${new Date().getFullYear()}-${String(counter).padStart(4, "0")}`;
 }
 
-export function buildInvoiceHtml({ seller, buyer, items, invoiceId, date }) {
+export function buildInvoiceHtml({ seller, buyer, items, invoiceId, date, taxType }) {
   const totals = calcTotals(items);
   const rows = items.map((t) => `
     <tr>
@@ -73,10 +73,10 @@ export function buildInvoiceHtml({ seller, buyer, items, invoiceId, date }) {
 <div class="invoice">
   <div class="header">
     <div class="title">REGISTLESS</div>
-    <div style="margin-top:6px;font-size:14px;opacity:.92">Számla · ${invoiceId} · ${date}</div>
+    <div style="margin-top:6px;font-size:14px;opacity:.92">${taxType === 'kata' ? 'Bizonylat' : 'Számla'} · ${invoiceId} · ${date}</div>
   </div>
   <div class="grid">
-    <div class="card"><strong>Eladó</strong><br/>${seller.name || ""}<br/>${seller.company || ""}<br/>${seller.address || ""}<br/>Adószám: ${seller.taxNumber || "-"}<br/>Bankszámla: ${seller.bankAccount || "-"}</div>
+    <div class="card"><strong>Eladó</strong><br/>${seller.name || ""}<br/>${seller.company || ""}<br/>${seller.address || ""}<br/>Adószám: ${seller.taxNumber || "-"}<br/>Bankszámlaszám: ${seller.bankAccount || "-"}</div>
     <div class="card"><strong>Vevő</strong><br/>${buyer.name || ""}<br/>${buyer.company || ""}<br/>${buyer.address || ""}</div>
   </div>
   <table>

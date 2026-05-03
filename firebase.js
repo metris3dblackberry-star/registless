@@ -60,19 +60,19 @@ export function listenChannel(channelId, callback) {
     .onSnapshot(snap => { if (snap.exists) callback(snap.data()); });
 }
 
+// ── RTDB ─────────────────────────────────────────────────────────
+export const rtdb = database();
+
 // ── Push token ────────────────────────────────────────────────────
 export async function savePushToken(uid, token) {
   if (!uid || !token) return;
-  await firestore().collection("users").doc(uid).set(
-    { pushToken: token, updatedAt: firestore.FieldValue.serverTimestamp() },
-    { merge: true }
-  );
+  await rtdb.ref(`users/${uid}/pushToken`).set(token);
 }
 
 export async function getPushToken(uid) {
   if (!uid) return null;
-  const snap = await firestore().collection("users").doc(uid).get();
-  return snap.exists ? snap.data()?.pushToken || null : null;
+  const snap = await rtdb.ref(`users/${uid}/pushToken`).once("value");
+  return snap.val() || null;
 }
 
 export { firestore, storage, database };
