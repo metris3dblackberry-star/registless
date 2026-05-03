@@ -569,9 +569,12 @@ export default function App() {
         <PartnerWorkspace
           initialTab={initialTab}
           contact={activeContact}
-         myUid={activeRole === "seller" 
-  	    ? (app.sellerUid || authUser?.uid || "") 
+         myUid={activeRole === "seller"
+  	    ? (app.sellerUid || authUser?.uid || "")
 	    : (app.buyerUid  || authUser?.uid || "")}
+          myName={activeRole === "seller"
+            ? (app.sellerName || "Eladó")
+            : (app.buyerName  || "Vevő")}
           partnerUid={activeContact.registlessUid}
           myRole={activeRole}
           onBack={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}
@@ -608,9 +611,10 @@ export default function App() {
           })}
           onPayment={(invoiceId) => handlePaymentRequest(activeContact.id, invoiceId)}
           onSendPaymentReminder={(invs) => handleSendPaymentReminder(activeContact.id, invs)}
-          onMessageSent={async (text) => {
-            const partnerToken = await getPushToken(activeContact.registlessUid).catch(() => null);
-            if (partnerToken) sendPushToUser(partnerToken, `💬 Új üzenet — ${app.sellerName || "Registless"}`, text.length > 60 ? text.substring(0, 60) + "..." : text, { screen: "partnerWorkspace" });
+          onMessageSent={(text) => {
+            // Push küldést a notifyNewMessage Cloud Function végzi
+            // (RTDB onCreate trigger a chats/{chatId}/messages/{msgId} path-en)
+            // — itt csak lokális UI-state kezelésre vagy elemzésre van hely
           }}
           onInvoicePaid={async (invoiceId, amount) => {
             sendLocalNotification("✅ Számla kifizetve!", `${invoiceId} · ${amount?.toLocaleString("hu-HU")} Ft`);

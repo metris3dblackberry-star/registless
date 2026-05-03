@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onValueCreated } = require("firebase-functions/v2/database");
 const admin  = require("firebase-admin");
 const Stripe = require("stripe");
 const { navTestUpload, submitNavInvoice } = require("./navService");
@@ -411,6 +412,63 @@ exports.confirmEmail = onRequest(
       res.redirect(`registless://confirm-success?email=${encodeURIComponent(email)}`);
     } catch (e) {
       res.status(500).send("Szerverhiba: " + e.message);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────
+// notifyNewMessage — Új chat üzenet → push a partnernek
+// Trigger: chats/{chatId}/messages/{msgId} RTDB onCreate
+// ─────────────────────────────────────────────────────────────────
+exports.notifyNewMessage = onValueCreated(
+  { ref: "/chats/{chatId}/messages/{msgId}" },
+  async (event) => {
+    try {
+      const msg    = event.data.val();
+      const chatId = event.params.chatId;
+      if (!msg || !chatId) return;
+
+      const senderUid = msg.senderId || msg.senderUid;
+      if (!senderUid) { console.log("[notifyNewMessage] nincs senderUid"); return; }
+
+      // chatId = sort([uid1, uid2]).join("_") — a partner az, aki nem a sender
+      const parts = chatId.split("_");
+      const partnerUid = parts.find(u => u && u !== senderUid);
+      if (!partnerUid) { console.log("[notifyNewMessage] nem található partnerUid", chatId); return; }
+
+      // Push token lekérése RTDB-ből
+      const tokenSnap = await admin.database().ref(`users/${partnerUid}/pushToken`).once("value");
+      const token = tokenSnap.val();
+      if (!token) { console.log("[notifyNewMessage] nincs token", partnerUid); return; }
+
+      const senderName = msg.senderName || "Új üzenet";
+      const isEncrypted = !!msg.encrypted;
+      const isImage     = msg.type === "image";
+      const body = isImage
+        ? "📷 Új kép"
+        : isEncrypted
+          ? "🔒 Új titkosított üzenet"
+          : (typeof msg.text === "string" && msg.text.length > 0
+              ? (msg.text.length > 80 ? msg.text.substring(0, 80) + "…" : msg.text)
+              : "Új üzenet");
+
+      const payload = {
+        to: token,
+        title: `💬 ${senderName}`,
+        body,
+        sound: "default",
+        data: { screen: "partnerWorkspace", chatId, senderUid },
+      };
+
+      const resp = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await resp.json().catch(() => null);
+      console.log("[notifyNewMessage] elküldve", partnerUid, result?.data?.status || "ok");
+    } catch (e) {
+      console.error("[notifyNewMessage] hiba:", e.message);
     }
   }
 );

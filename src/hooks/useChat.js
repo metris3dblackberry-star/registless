@@ -9,7 +9,7 @@ function buildChatId(uid1, uid2) {
   return [uid1, uid2].sort().join("_");
 }
 
-export function useChat(myUid, partnerUid) {
+export function useChat(myUid, partnerUid, myName = "") {
   console.log("🔍 useChat myUid=" + (myUid||"null") + " partnerUid=" + (partnerUid||"null") + " chatId=" + buildChatId(myUid||"a", partnerUid||"b"));
   
   const [messages, setMessages] = useState([]);
@@ -126,6 +126,7 @@ export function useChat(myUid, partnerUid) {
       if (!recipientPub || !myPriv) {
         await dbRef.push({
           text: content, senderId: myUid, senderUid: myUid,
+          senderName: myName || "",
           timestamp: Date.now(), encrypted: false, type,
         });
       } else {
@@ -134,6 +135,7 @@ export function useChat(myUid, partnerUid) {
         const { ciphertext, nonce } = encryptMsg(content, recipientPub, myPriv);
         await dbRef.push({
           ciphertext, nonce, senderId: myUid, senderUid: myUid,
+          senderName: myName || "",
           timestamp: Date.now(), encrypted: true, type,
         });
       }

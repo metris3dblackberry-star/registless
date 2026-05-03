@@ -55,6 +55,7 @@ export default function PartnerWorkspace({
   contact,
   myUid,
   partnerUid,
+  myName = "",
   myRole = "seller",
   initialTab = "activity",
   onBack,
@@ -100,7 +101,7 @@ export default function PartnerWorkspace({
 
   // Channel mindig a két UID sort()-ja alapján — roletól független
   const channelId = getChannelId(myUid, partnerUid);
-  const { messages, send, sending } = useChat(myUid, partnerUid);
+  const { messages, send, sending } = useChat(myUid, partnerUid, myName);
 
   if (!contact) return null;
 
