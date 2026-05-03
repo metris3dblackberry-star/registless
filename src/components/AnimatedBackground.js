@@ -51,7 +51,7 @@ function EmberBG() {
   }, []);
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a2e' }]}>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#d2b48c' }]}>
       {orbs.map((orb, i) => (
         <Animated.View
           key={i}
@@ -117,7 +117,7 @@ function AuroraBG() {
   }, []);
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a2e' }]}>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#d2b48c' }]}>
       {AURORA_BANDS.map((band, i) => (
         <Animated.View key={i} style={{
           position: 'absolute', left: -20, right: -20,
@@ -173,7 +173,7 @@ function ParticlesBG() {
   }, []);
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a2e' }]}>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#d2b48c' }]}>
       <View style={{
         position: 'absolute', bottom: -80, left: W * 0.5 - 100,
         width: 200, height: 200, borderRadius: 100,
@@ -227,7 +227,7 @@ function PulseBG() {
   }, []);
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a2e' }]}>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#d2b48c' }]}>
       {/* Kék accent */}
       <View style={{
         position: 'absolute', top: H * 0.15 - 60, left: W * 0.15 - 60,
@@ -289,7 +289,7 @@ function MeshBG() {
   }, []);
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a2e' }]}>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#d2b48c' }]}>
       <View style={{
         position: 'absolute', bottom: -50, right: -30,
         width: 180, height: 180, borderRadius: 90,

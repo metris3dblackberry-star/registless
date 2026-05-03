@@ -198,12 +198,18 @@ export default function App() {
     const cleanup = setupNotificationListeners(
       (notification) => { console.log("Push kapva:", notification); },
       (response) => {
-        const data = response.notification.request.content.data;
-        if (data?.screen) navigate(data.screen, data);
+        const data = response.notification.request.content.data || {};
+        // senderUid alapján contact lookup → így a push tap a megfelelő partner workspace-re visz
+        if (data.senderUid && !data.contactId) {
+          const found = (app.contacts || []).find(c => c.registlessUid === data.senderUid);
+          if (found) data.contactId = found.id;
+          else console.log("[Push tap] senderUid nem található a contactok közt:", data.senderUid);
+        }
+        if (data.screen) navigate(data.screen, data);
       }
     );
     return cleanup;
-  }, [app.isHydrated, app.sellerUid]);
+  }, [app.isHydrated, app.sellerUid, app.contacts]);
 
   // ── Booking requests RTDB listener (aktív contactra) ──────────
   useEffect(() => {
@@ -358,7 +364,11 @@ export default function App() {
         lastActivityAt: Date.now(),
       });
       const buyerToken = await getPushToken(buyerContact.registlessUid).catch(() => null);
-      if (buyerToken) sendPushToUser(buyerToken, "📅 Időpont visszaigazolva!", `${appointment.serviceName} – ${appointment.datum} ${appointment.ido}`, { screen: "partnerWorkspace", contactId: buyerContact.id });
+      // senderUid = az ELADÓ saját UID-ja, hogy a vevő appja megtalálja az eladó contact-ját
+      const mySellerUid = activeRole === "seller"
+        ? (app.sellerUid || authUser?.uid || "")
+        : (app.buyerUid  || authUser?.uid || "");
+      if (buyerToken) sendPushToUser(buyerToken, "📅 Időpont visszaigazolva!", `${appointment.serviceName} – ${appointment.datum} ${appointment.ido}`, { screen: "partnerWorkspace", senderUid: mySellerUid });
     }
     const updatedRequests = (sellerContact?.bookingRequests || []).map(r => r.id === req.id ? { ...r, statusz: "elfogadva" } : r);
     app.updateContact(contactId, { bookingRequests: updatedRequests });
@@ -661,14 +671,14 @@ export default function App() {
                 await saveBookingRequest(chatId, fullRequest);
               } catch (e) { console.log("[Booking RTDB sync]", e.message); }
 
-              // Push értesítés a partnernek
+              // Push értesítés a partnernek (senderUid → eladó megtalálja a vevő contact-ját)
               try {
                 const token = await getPushToken(activeContact.registlessUid);
                 if (token) {
                   await sendPushToUser(token,
                     "📅 Új időpont kérés",
                     `${fullRequest.senderName}: ${req.datum} ${req.ido || ""} (${(req.duration||60)} perc)`,
-                    { screen: "partnerWorkspace" }
+                    { screen: "partnerWorkspace", senderUid: myUid }
                   );
                 }
               } catch {}
