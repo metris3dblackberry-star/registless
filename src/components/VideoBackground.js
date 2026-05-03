@@ -2,7 +2,8 @@ import React, { useRef, useState } from 'react';
 import { StyleSheet, View, Platform } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 
-const VIDEO_URL = 'https://pub-09680686a29d4c62868764ed67285bf6.r2.dev/R-84.9.mp4';
+// Local asset — APK-ba épül, azonnali playback minden home navigálásnál
+const VIDEO_ASSET = require('../../assets/videos/R-84.9.mp4');
 
 export default function VideoBackground({ children }) {
   const videoRef = useRef(null);
@@ -20,7 +21,7 @@ export default function VideoBackground({ children }) {
     <View style={styles.container}>
       <Video
         ref={videoRef}
-        source={{ uri: VIDEO_URL }}
+        source={VIDEO_ASSET}
         style={StyleSheet.absoluteFill}
         resizeMode={ResizeMode.COVER}
         shouldPlay

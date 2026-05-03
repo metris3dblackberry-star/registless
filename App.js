@@ -1275,22 +1275,34 @@ if (screen === "qrShare") {
     { icon: "💰", label: "Pénzügyek", onPress: () => { if (activeContact) { navigate("partnerWorkspace", { contactId: activeContact.id, initialTab: "finance" }); } else { navigate("invoiceList"); } } },
   ];
 
-  // ✅ Home → VideoBackground, többi képernyő → AnimatedBackground
-  const Wrapper = screen === "home" ? VideoBackground : AnimatedBackground;
-  const wrapperProps = { style: { flex: 1 } };
+  // ✅ Háttér layer-ek: Videó MINDIG mount-olva (cache-eli a player-t),
+  // opacity rejti el nem-home-on. AnimatedBackground csak nem-home-on render-elve.
+  const isHome = screen === "home";
 
   return (
     <ErrorBoundary>
-    <Wrapper {...wrapperProps}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-        {content}
-      </Animated.View>
-
-      {showFab && (
-        <WheelFAB items={wheelItems} />
-      )}
-    </Wrapper>
+      <View style={{ flex: 1 }}>
+        {/* Videó háttér — mindig mount-olva, így nincs újra-betöltés home-ra navigáláskor */}
+        <View style={[StyleSheet.absoluteFill, { opacity: isHome ? 1 : 0 }]} pointerEvents="none">
+          <VideoBackground />
+        </View>
+        {/* Animált háttér — csak nem-home-on */}
+        {!isHome && (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <AnimatedBackground />
+          </View>
+        )}
+        {/* Tartalom + status bar + FAB */}
+        <View style={StyleSheet.absoluteFill}>
+          <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+          <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+            {content}
+          </Animated.View>
+          {showFab && (
+            <WheelFAB items={wheelItems} />
+          )}
+        </View>
+      </View>
     </ErrorBoundary>
   );
 }
