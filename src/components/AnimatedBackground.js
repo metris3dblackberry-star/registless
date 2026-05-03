@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Animated, StyleSheet, Dimensions } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+
 
 const { width: W, height: H } = Dimensions.get('window');
 const MODES = ['ember', 'aurora', 'particles', 'pulse', 'mesh'];
@@ -92,13 +92,14 @@ function EmberBG() {
 // 2. AURORA – kék-lila hullámok
 // ─────────────────────────────────────────────────────────────
 const AURORA_BANDS = [
-  { yFrac: 0.28, h: 130, colors: ['transparent', 'rgba(40,80,200,0.45)', 'rgba(100,20,180,0.38)', 'transparent'] },
-  { yFrac: 0.46, h: 110, colors: ['transparent', 'rgba(20,140,110,0.42)', 'rgba(30,70,200,0.32)', 'transparent'] },
-  { yFrac: 0.65, h: 120, colors: ['transparent', 'rgba(130,20,200,0.40)', 'rgba(40,90,180,0.42)', 'transparent'] },
+  { yFrac: 0.28, h: 130, color: 'rgba(40,80,200,0.4)' },
+  { yFrac: 0.46, h: 110, color: 'rgba(20,140,110,0.38)' },
+  { yFrac: 0.65, h: 120, color: 'rgba(130,20,200,0.38)' },
 ];
 
 function AuroraBG() {
   const tys = useRef(AURORA_BANDS.map(() => new Animated.Value(0))).current;
+  const ops = useRef(AURORA_BANDS.map(() => new Animated.Value(0.5))).current;
 
   useEffect(() => {
     tys.forEach((ty, i) => {
@@ -107,20 +108,26 @@ function AuroraBG() {
         Animated.timing(ty, { toValue: -(28 + i * 12), duration: 5500 + i * 1200, useNativeDriver: true }),
       ])).start();
     });
+    ops.forEach((op, i) => {
+      Animated.loop(Animated.sequence([
+        Animated.timing(op, { toValue: 0.9, duration: 3000 + i * 800, useNativeDriver: true }),
+        Animated.timing(op, { toValue: 0.2, duration: 3000 + i * 800, useNativeDriver: true }),
+      ])).start();
+    });
   }, []);
 
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: '#08080f' }]}>
       {AURORA_BANDS.map((band, i) => (
         <Animated.View key={i} style={{
-          position: 'absolute', left: 0, right: 0,
+          position: 'absolute', left: -20, right: -20,
           top: H * band.yFrac, height: band.h,
-          transform: [{ translateY: tys[i] }],
-        }}>
-          <LinearGradient colors={band.colors} style={StyleSheet.absoluteFill} />
-        </Animated.View>
+          backgroundColor: band.color,
+          borderRadius: band.h / 2,
+          opacity: ops[i],
+          transform: [{ translateY: tys[i] }, { scaleX: 1.3 }],
+        }} />
       ))}
-      {/* Narancsos brand glow */}
       <View style={{
         position: 'absolute', bottom: -60, right: -40,
         width: 220, height: 220, borderRadius: 110,
