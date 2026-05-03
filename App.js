@@ -28,6 +28,7 @@ import NfcScreen        from "./src/screens/NfcScreen";
 import CalendarScreen   from "./src/screens/CalendarScreen";
 import LocalSearchScreen from "./src/screens/LocalSearchScreen";
 import BookingScreen     from "./src/screens/BookingScreen";
+import FinanceScreen     from "./src/screens/FinanceScreen";
 import AnimatedBackground from "./src/components/AnimatedBackground";
 import VideoBackground from "./src/components/VideoBackground";
 import WheelFAB        from "./src/components/WheelFAB";
@@ -540,7 +541,7 @@ export default function App() {
           onNewPartner={() => navigate("qrScan", { role: "seller" })}
           onTodaySchedule={() => navigate("todaySchedule")}
           onNewService={() => navigate("newService")}
-          onInvoices={() => navigate("invoiceList")}
+          onInvoices={() => navigate("finance")}
           onSettings={(sec) => navigate("settings", { settingsSection: sec || null })}
           onHome={() => navigate("home")}
           onOcr={() => navigate("ocr", { ocrUseCase: "partner" })}
@@ -905,6 +906,20 @@ if (screen === "qrShare") {
   if (screen === "localSearch") {
     content = (
       <LocalSearchScreen
+        onBack={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}
+      />
+    );
+  }
+
+  // ── Finance ───────────────────────────────────────────────────
+  if (screen === "finance") {
+    content = (
+      <FinanceScreen
+        contacts={app.contacts || []}
+        expenses={app.expenses || []}
+        onAddExpense={(exp) => app.addExpense(exp)}
+        onDeleteExpense={(id) => app.deleteExpense(id)}
+        onPartner={(c) => navigate("partnerWorkspace", { contactId: c.id, role: activeRole, initialTab: "finance" })}
         onBack={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}
       />
     );

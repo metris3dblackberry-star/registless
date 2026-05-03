@@ -112,4 +112,65 @@ export async function updateBookingRequestStatus(chatId, requestId, statusz, ext
   });
 }
 
+// ── Contacts (Firestore — backup/restore + cross-device) ─────────
+// Path: users/{uid}/contacts/{contactId}
+// AsyncStorage marad lokális cache, Firestore = source of truth login után
+export async function saveAllContactsToFirestore(uid, contacts) {
+  if (!uid || !Array.isArray(contacts)) return;
+  try {
+    const db    = firestore();
+    const batch = db.batch();
+    const colRef = db.collection("users").doc(uid).collection("contacts");
+
+    // Egyszerű stratégia: minden contact-ot felülírunk (set merge:true)
+    // A törléseket nem oldja meg ez a verzió — arra deleteContactFromFirestore van
+    contacts.forEach((c) => {
+      if (!c?.id) return;
+      batch.set(colRef.doc(c.id), { ...c, updatedAt: Date.now() }, { merge: true });
+    });
+    await batch.commit();
+  } catch (e) {
+    console.log("[Firestore] saveAllContacts error:", e.message);
+  }
+}
+
+export async function deleteContactFromFirestore(uid, contactId) {
+  if (!uid || !contactId) return;
+  try {
+    await firestore().collection("users").doc(uid).collection("contacts").doc(contactId).delete();
+  } catch (e) {
+    console.log("[Firestore] deleteContact error:", e.message);
+  }
+}
+
+export async function loadContactsFromFirestore(uid) {
+  if (!uid) return [];
+  try {
+    const snap = await firestore().collection("users").doc(uid).collection("contacts").get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.log("[Firestore] loadContacts error:", e.message);
+    return [];
+  }
+}
+
+export function listenContactsFromFirestore(uid, callback) {
+  if (!uid) return () => {};
+  try {
+    const unsub = firestore()
+      .collection("users").doc(uid).collection("contacts")
+      .onSnapshot(
+        (snap) => {
+          const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          callback(list);
+        },
+        (e) => console.log("[Firestore] listenContacts error:", e.message)
+      );
+    return unsub;
+  } catch (e) {
+    console.log("[Firestore] listenContacts setup error:", e.message);
+    return () => {};
+  }
+}
+
 export { firestore, storage, database };

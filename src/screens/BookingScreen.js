@@ -304,7 +304,7 @@ const CELL = (SW - 40) / 7;
 const SLOT_SIZE = (SW - 48) / 6;
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#0a0a0a", paddingTop: 52 },
+  root: { flex: 1, backgroundColor: "transparent", paddingTop: 52 },
   header: { paddingHorizontal: 20, marginBottom: 16 },
   title: { color: "#fff", fontSize: 24, fontWeight: "bold" },
   subtitle: { color: colors.accent, fontSize: 14, marginTop: 4 },

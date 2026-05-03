@@ -25,6 +25,16 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+firebase-debug.log
+functions/firebase-debug.log
+functions/*.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+pubsub-debug.log
+storage-debug.log
+hosting-debug.log
 
 # macOS
 .DS_Store

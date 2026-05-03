@@ -172,7 +172,7 @@ export default function OCRScreen({ onBack, onApplyPartner, onApplyProfile, onAp
   const hasResults = parsedFields.length > 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       <View style={styles.topBar}>
         <Text style={styles.topTitle}>📷 Claude AI karakterfelismerés</Text>
         <Text style={styles.topSub}>Névjegykártya, dokumentum, számla</Text>

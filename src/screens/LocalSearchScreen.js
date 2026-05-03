@@ -307,7 +307,7 @@ export default function LocalSearchScreen({ contacts = [], onBack, onBooking }) 
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#0a0a0a", paddingTop: 52, paddingHorizontal: 16 },
+  root: { flex: 1, backgroundColor: "transparent", paddingTop: 52, paddingHorizontal: 16 },
   header: { marginBottom: 16 },
   title: { color: "#fff", fontSize: 26, fontWeight: "bold" },
   subtitle: { color: "#888", fontSize: 13, marginTop: 4 },

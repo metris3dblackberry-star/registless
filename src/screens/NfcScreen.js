@@ -101,7 +101,7 @@ export default function NfcScreen({
   const cfg = statusConfig[status] || statusConfig.idle;
 
   return (
-     <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0a0a' }}>
+     <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
       <View style={st.container}>
 
         {/* Header */}

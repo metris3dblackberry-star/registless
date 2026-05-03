@@ -5,7 +5,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fromSellerCustomer, fromKapcsolat } from "../models/Contact";
-import { rtdb } from "../../firebase";
+import {
+  rtdb,
+  saveAllContactsToFirestore,
+  loadContactsFromFirestore,
+  deleteContactFromFirestore,
+} from "../../firebase";
 
 const STORAGE_KEY    = "registless_app_state_v9";
 const SELLER_UID_KEY = "registless_seller_uid_v1";
@@ -72,6 +77,7 @@ export function useAppState() {
   const [hasSeenOnboarding, setHasSeenOnboarding]     = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("revolut");
   const [sellerTaxType, setSellerTaxType]             = useState("kata");
+  const [expenses, setExpenses]                       = useState([]);
 
   // ── Adatok beállítása objektumból (RTDB vagy AsyncStorage) ────
   function applyState(s) {
@@ -99,6 +105,7 @@ export function useAppState() {
 
     if (s.hasSeenOnboarding !== undefined) setHasSeenOnboarding(s.hasSeenOnboarding || false);
     if (s.sellerTaxType     !== undefined) setSellerTaxType(s.sellerTaxType || "kata");
+    if (s.expenses          !== undefined) setExpenses(Array.isArray(s.expenses) ? s.expenses : []);
     if (s.quickServices     !== undefined) setQuickServices(s.quickServices || [
       { id: "qs-1", name: "Személyi edzés", amount: 10000 },
       { id: "qs-2", name: "Masszázs",        amount: 12000 },
@@ -145,7 +152,7 @@ export function useAppState() {
     initUids();
   }, []);
 
-  // ── RTDB betöltés bejelentkezés után ──────────────────────────
+  // ── RTDB + Firestore betöltés bejelentkezés után ──────────────
   // Hívd meg: app.syncFromRTDB(authUser.uid) bejelentkezéskor
   async function syncFromRTDB(uid) {
     if (!uid) return;
@@ -156,11 +163,21 @@ export function useAppState() {
         console.log("[RTDB] Adatok visszatöltve:", uid);
         applyState(rtdbData);
         if (rtdbData.receivedInvoices) setReceivedInvoices(rtdbData.receivedInvoices);
-        // AsyncStorage-t is frissítjük
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(rtdbData));
       }
+      // Firestore contacts → ha többet/frissebbet talál, override
+      const fsContacts = await loadContactsFromFirestore(uid);
+      if (fsContacts.length > 0) {
+        console.log("[Firestore] Contacts visszatöltve:", fsContacts.length);
+        // Egyszerű merge: Firestore = source of truth, ha több contact van
+        setContacts((prev) => {
+          if (fsContacts.length >= prev.length) return fsContacts;
+          // Lokálisan több — küldjük fel inkább a Firestore-t
+          return prev;
+        });
+      }
     } catch (e) {
-      console.log("[RTDB] syncFromRTDB error:", e.message);
+      console.log("[Sync] syncFromRTDB error:", e.message);
     }
   }
 
@@ -178,16 +195,19 @@ export function useAppState() {
       quickServices: quickServices || [],
       hasSeenOnboarding: hasSeenOnboarding || false,
       sellerTaxType: sellerTaxType || "kata",
+      expenses: expenses || [],
     };
 
     // AsyncStorage — azonnal
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch(() => {});
 
-    // RTDB — debounced (ne írjon minden karakter után)
+    // RTDB + Firestore — debounced (ne írjon minden karakter után)
     if (firebaseUid) {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         rtdbSave(firebaseUid, payload);
+        // Contacts külön Firestore-ba (per-doc) → backup + cross-device
+        saveAllContactsToFirestore(firebaseUid, contacts || []);
       }, 1500);
     }
   }, [
@@ -195,6 +215,7 @@ export function useAppState() {
     sellerName, sellerAddress, sellerCompany, sellerTaxNumber, sellerBankAccount,
     buyerName, buyerAddress, buyerCompany,
     contacts, invoiceCounter, quickServices, sellerTaxType, hasSeenOnboarding,
+    expenses,
   ]);
 
   // ── Invoice counter ───────────────────────────────────────────
@@ -255,6 +276,10 @@ export function useAppState() {
 
   function deleteContact(id) {
     setContacts((prev) => prev.filter((c) => c.id !== id));
+    // Firestore-ból is távolítsd el (best-effort)
+    if (firebaseUid && id) {
+      deleteContactFromFirestore(firebaseUid, id).catch(() => {});
+    }
   }
 
   function addActivityToContact(contactId, activity) {
@@ -325,6 +350,24 @@ export function useAppState() {
 
   function markOnboardingSeen() { setHasSeenOnboarding(true); }
 
+  // ── Expenses API ──────────────────────────────────────────────
+  function addExpense(expense) {
+    const exp = {
+      id: makeId("exp"),
+      amount: 0, category: "other", categoryLabel: "Egyéb", categoryIcon: "📌",
+      note: "", createdAt: Date.now(),
+      ...expense,
+    };
+    setExpenses((prev) => [exp, ...prev]);
+    return exp;
+  }
+  function deleteExpense(id) {
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+  }
+  function updateExpense(id, updates) {
+    setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, ...updates } : e));
+  }
+
   return {
     isHydrated,
     registlessUid, sellerUid, buyerUid, firebaseUid,
@@ -349,6 +392,7 @@ export function useAppState() {
     sellerTaxType, setSellerTaxType,
     sellerQrPayload, buyerQrPayload,
     receivedInvoices,
+    expenses, addExpense, deleteExpense, updateExpense,
     syncFromRTDB, // ← ezt hívd meg bejelentkezés után!
   };
 }
