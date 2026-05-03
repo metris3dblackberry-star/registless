@@ -41,11 +41,13 @@ function BottomNav({ onHome, onPartners, onScan, onAppointments, onInvoices }) {
 
 const bn = StyleSheet.create({
   wrap: {
-    position: "absolute", bottom: 0, left: 0, right: 0,
+    position: "absolute", bottom: 35, left: 0, right: 0,
     height: 72, flexDirection: "row", alignItems: "center",
     backgroundColor: "rgba(12,12,12,0.96)",
     borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)",
     paddingBottom: 8,
+    borderRadius: 24,
+    marginHorizontal: 10,
   },
   tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 8 },
   tabIcon: { fontSize: 18, color: "#555" },
@@ -83,7 +85,7 @@ export default function BuyerDashboard({
     <View style={s.root}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 52, paddingBottom: 90 }}
+        contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 52, paddingBottom: 130 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
