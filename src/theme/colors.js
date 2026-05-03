@@ -2,10 +2,10 @@ export const colors = {
   // Backgrounds
   bg: "transparent",
   bgDark: "#0a0a0a",
-  bgCard: "rgba(20,20,20,0.50)",
-  bgInput: "rgba(20,20,20,0.62)",
-  bgButton: "rgba(88,88,88,0.34)",
-  bgButtonOutline: "rgba(70,70,70,0.28)",
+  bgCard: "rgba(45,45,45,0.92)",
+  bgInput: "rgba(45,45,45,0.94)",
+  bgButton: "rgba(70,70,70,0.85)",
+  bgButtonOutline: "rgba(55,55,55,0.78)",
 
   // Accents
   accent: "#ff7a1a",
