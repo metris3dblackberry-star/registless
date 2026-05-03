@@ -75,4 +75,41 @@ export async function getPushToken(uid) {
   return snap.val() || null;
 }
 
+// ── Booking requests (RTDB sync) ─────────────────────────────────
+// Path: bookings/{chatId}/{requestId}
+// chatId = sort([uid1, uid2]).join("_") — mindkét fél ugyanazt látja
+export function buildBookingChatId(uid1, uid2) {
+  if (!uid1 || !uid2) return null;
+  return [String(uid1), String(uid2)].sort().join("_");
+}
+
+export async function saveBookingRequest(chatId, request) {
+  if (!chatId || !request?.id) return;
+  await rtdb.ref(`bookings/${chatId}/${request.id}`).set({
+    ...request,
+    updatedAt: Date.now(),
+  });
+}
+
+export function listenBookingRequests(chatId, callback) {
+  if (!chatId) return () => {};
+  const ref = rtdb.ref(`bookings/${chatId}`);
+  const handler = ref.on("value", (snap) => {
+    const raw = snap.val() || {};
+    const list = Object.entries(raw).map(([id, v]) => ({ ...v, id }));
+    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    callback(list);
+  });
+  return () => { try { ref.off("value", handler); } catch {} };
+}
+
+export async function updateBookingRequestStatus(chatId, requestId, statusz, extra = {}) {
+  if (!chatId || !requestId) return;
+  await rtdb.ref(`bookings/${chatId}/${requestId}`).update({
+    statusz,
+    ...extra,
+    updatedAt: Date.now(),
+  });
+}
+
 export { firestore, storage, database };

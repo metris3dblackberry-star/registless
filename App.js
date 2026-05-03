@@ -56,7 +56,13 @@ import {
   sendPushToUser,
   setupNotificationListeners,
 } from "./pushService";
-import { getPushToken }    from "./firebase";
+import {
+  getPushToken,
+  buildBookingChatId,
+  saveBookingRequest,
+  listenBookingRequests,
+  updateBookingRequestStatus,
+} from "./firebase";
 import { onAuthChange, logout } from "./src/services/authService";
 import { getLicense, getLicenseStatus, getLicenseBadge, startTrial, PLANS } from "./src/services/licenseService";
 import AuthScreen    from "./src/screens/AuthScreen";
@@ -199,6 +205,25 @@ export default function App() {
     return cleanup;
   }, [app.isHydrated, app.sellerUid]);
 
+  // ── Booking requests RTDB listener (aktív contactra) ──────────
+  useEffect(() => {
+    if (!app.isHydrated) return;
+    const partnerUid = activeContact?.registlessUid;
+    if (!partnerUid || partnerUid.startsWith("uid-ocr")) return;
+    const myUid = activeRole === "seller"
+      ? (app.sellerUid || authUser?.uid || "")
+      : (app.buyerUid  || authUser?.uid || "");
+    if (!myUid) return;
+    const chatId = buildBookingChatId(myUid, partnerUid);
+    if (!chatId) return;
+    const unsub = listenBookingRequests(chatId, (list) => {
+      try {
+        app.updateContact(activeContact.id, { bookingRequests: list });
+      } catch (e) { console.log("[Booking listener] updateContact hiba:", e.message); }
+    });
+    return unsub;
+  }, [app.isHydrated, activeContact?.id, activeContact?.registlessUid, activeRole, app.sellerUid, app.buyerUid, authUser?.uid]);
+
   // ── Keyboard ──────────────────────────────────────────────────
   useEffect(() => {
     const { Keyboard } = require("react-native");
@@ -337,6 +362,18 @@ export default function App() {
     }
     const updatedRequests = (sellerContact?.bookingRequests || []).map(r => r.id === req.id ? { ...r, statusz: "elfogadva" } : r);
     app.updateContact(contactId, { bookingRequests: updatedRequests });
+
+    // RTDB sync — a vevő appja real-time látja az elfogadást
+    const myUid = activeRole === "seller"
+      ? (app.sellerUid || authUser?.uid || "")
+      : (app.buyerUid  || authUser?.uid || "");
+    if (myUid && partnerUid && !partnerUid.startsWith("uid-ocr") && req?.id) {
+      try {
+        const chatId = buildBookingChatId(myUid, partnerUid);
+        await updateBookingRequestStatus(chatId, req.id, "elfogadva", { acceptedAt: Date.now(), appointmentId: appointment.id });
+      } catch (e) { console.log("[Booking accept RTDB sync]", e.message); }
+    }
+
     sendLocalNotification("📅 Időpont elfogadva", `${appointment.serviceName} – ${appointment.datum} ${appointment.ido}`);
     Alert.alert("✅ Időpont elfogadva", `${appointment.serviceName}\n${appointment.datum} ${appointment.ido}`);
   }
@@ -596,23 +633,43 @@ export default function App() {
         contact={activeContact}
         onSubmit={async (req) => {
           if (activeContact) {
-            app.addActivityToContact(activeContact.id, makeActivity(ActivityType.BOOKING_REQUEST, `Időpont kérés: ${req.datum} ${req.ido} (${req.duration} perc)`, { request: req }));
+            const myUid = activeRole === "seller"
+              ? (app.sellerUid || authUser?.uid || "")
+              : (app.buyerUid  || authUser?.uid || "");
+            const requestId = `req-${Date.now()}`;
+            const fullRequest = {
+              ...req,
+              id: requestId,
+              statusz: "függőben",
+              createdAt: Date.now(),
+              senderUid: myUid,
+              senderName: activeRole === "seller" ? (app.sellerName || "Eladó") : (app.buyerName || "Vevő"),
+              receiverUid: activeContact.registlessUid || null,
+            };
+            app.addActivityToContact(activeContact.id, makeActivity(ActivityType.BOOKING_REQUEST, `Időpont kérés: ${req.datum} ${req.ido} (${req.duration} perc)`, { request: fullRequest }));
             const contact = app.getContactById(activeContact.id);
-            app.updateContact(activeContact.id, { bookingRequests: [{ ...req, id: `req-${Date.now()}`, statusz: "függőben", createdAt: Date.now() }, ...(contact?.bookingRequests || [])] });
-            // Push értesítés az eladónak
-            if (activeContact.registlessUid && !activeContact.registlessUid.startsWith("uid-ocr")) {
+            app.updateContact(activeContact.id, { bookingRequests: [fullRequest, ...(contact?.bookingRequests || [])] });
+
+            // RTDB sync — partner valós időben látja
+            if (myUid && activeContact.registlessUid && !activeContact.registlessUid.startsWith("uid-ocr")) {
+              try {
+                const chatId = buildBookingChatId(myUid, activeContact.registlessUid);
+                await saveBookingRequest(chatId, fullRequest);
+              } catch (e) { console.log("[Booking RTDB sync]", e.message); }
+
+              // Push értesítés a partnernek
               try {
                 const token = await getPushToken(activeContact.registlessUid);
                 if (token) {
                   await sendPushToUser(token,
                     "📅 Új időpont kérés",
-                    `${app.buyerName || "Vevő"}: ${req.datum} ${req.ido || ""} (${(req.duration||60)} perc)`,
+                    `${fullRequest.senderName}: ${req.datum} ${req.ido || ""} (${(req.duration||60)} perc)`,
                     { screen: "partnerWorkspace" }
                   );
                 }
               } catch {}
             } else {
-              console.log("[Booking] OCR partner — push nem küldhető, nincs valódi UID");
+              console.log("[Booking] OCR partner vagy hiányzó UID — RTDB sync és push kihagyva");
             }
           }
           Alert.alert("✅ Elküldve", "Az időpont kérés el lett küldve.", [{ text: "OK" }]);
