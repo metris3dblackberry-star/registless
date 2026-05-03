@@ -265,6 +265,6 @@ const st = StyleSheet.create({
   legendText: { color: "#888", fontSize: 11 },
   dayDetail: { marginTop: 8 },
   dayDetailTitle: { color: "#fff", fontSize: 16, fontWeight: "bold", marginBottom: 10 },
-  apptCard: { backgroundColor: "rgba(20,20,20,0.6)", borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1 },
+  apptCard: { backgroundColor: "rgba(45,45,45,0.92)", borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1 },
   backBtn: { position: "absolute", bottom: 49, left: 20, backgroundColor: "rgba(255,122,26,0.15)", borderWidth: 1, borderColor: "#ff7a1a", borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10 },
 });

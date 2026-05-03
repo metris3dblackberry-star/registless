@@ -310,7 +310,7 @@ const s = StyleSheet.create({
   subtitle: { color: colors.accent, fontSize: 14, marginTop: 4 },
 
   // Naptár
-  calendarBox: { marginHorizontal: 16, backgroundColor: "rgba(20,20,20,0.9)", borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#2a2a2a" },
+  calendarBox: { marginHorizontal: 16, backgroundColor: "rgba(45,45,45,0.92)", borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#2a2a2a" },
   calNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   navBtn: { padding: 8, backgroundColor: "rgba(255,122,26,0.1)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,122,26,0.3)" },
   navBtnText: { color: colors.accent, fontSize: 20, fontWeight: "bold" },
@@ -326,7 +326,7 @@ const s = StyleSheet.create({
   busyDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.accent, position: "absolute", bottom: 4 },
 
   // Slots
-  slotsBox: { marginHorizontal: 16, backgroundColor: "rgba(20,20,20,0.9)", borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#2a2a2a" },
+  slotsBox: { marginHorizontal: 16, backgroundColor: "rgba(45,45,45,0.92)", borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#2a2a2a" },
   slotsTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 6 },
   slotsLegend: { color: "#666", fontSize: 11, marginBottom: 12 },
   slotsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

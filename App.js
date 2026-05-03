@@ -485,7 +485,7 @@ export default function App() {
           {badge && (
             <TouchableOpacity
               onPress={() => setShowUpgrade(true)}
-              style={{ backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6 }}
+              style={{ backgroundColor: "rgba(45,45,45,0.92)", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.10)" }}
             >
               <Text style={{ color: badge.color, fontWeight: "bold", fontSize: 13 }}>
                 {badge.text} {licenseStatus?.plan !== "pro" ? "· Frissítés →" : ""}

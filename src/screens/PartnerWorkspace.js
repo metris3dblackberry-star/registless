@@ -344,7 +344,7 @@ export default function PartnerWorkspace({
               />
               <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
                 <TouchableOpacity
-                  style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 12, padding: 14, alignItems: "center" }}
+                  style={{ flex: 1, backgroundColor: "rgba(45,45,45,0.92)", borderRadius: 12, padding: 14, alignItems: "center", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.10)" }}
                   onPress={() => setEditingMsg(null)}
                 >
                   <Text style={{ color: "#888" }}>Mégse</Text>
@@ -907,7 +907,7 @@ const ws = StyleSheet.create({
   },
   bubbleTheirs: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(45,45,45,0.92)",
     borderWidth: 1, borderColor: colors.border,
     borderBottomLeftRadius: 4,
   },
@@ -940,7 +940,7 @@ const ws = StyleSheet.create({
   sendIcon: { color: colors.textPrimary, fontSize: 20 },
   attachBtn: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(45,45,45,0.92)",
     justifyContent: "center", alignItems: "center",
   },
   attachIcon: { fontSize: 18 },

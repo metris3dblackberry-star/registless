@@ -206,7 +206,7 @@ const st = StyleSheet.create({
   },
   partnerCard: {
     width: "100%",
-    backgroundColor: "rgba(20,20,20,0.7)",
+    backgroundColor: "rgba(45,45,45,0.92)",
     borderRadius: 20, padding: 20, marginBottom: 24,
     borderWidth: 1, borderColor: "rgba(76,175,80,0.4)",
   },

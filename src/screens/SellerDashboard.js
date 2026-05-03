@@ -12,12 +12,12 @@ import { formatCurrency } from "../services/invoice";
 import { searchContacts } from "../models/Contact";
 import { sortContactsByPriority, getContactStatuses, STATUS_CONFIG } from "../utils/contactPriority";
 
-// ── Glassmorphism tokens ──────────────────────────────────────
+// ── Solid dark grey csempék (a tan háttéren is olvashatóak) ───
 const glass = {
-  bg:     "rgba(255,255,255,0.07)",
-  border: "rgba(255,255,255,0.11)",
-  bgAccent: "rgba(229,90,30,0.15)",
-  borderAccent: "rgba(229,90,30,0.35)",
+  bg:     "rgba(45,45,45,0.92)",
+  border: "rgba(255,255,255,0.10)",
+  bgAccent: "rgba(229,90,30,0.22)",
+  borderAccent: "rgba(229,90,30,0.50)",
 };
 
 function getTodayStr() {
@@ -210,8 +210,8 @@ export default function SellerDashboard({
                 activeOpacity={0.75}
               >
                 <View style={[s.avatar, {
-                  backgroundColor: isToday ? glass.bgAccent : "rgba(255,255,255,0.08)",
-                  borderColor: isToday ? glass.borderAccent : "rgba(255,255,255,0.1)",
+                  backgroundColor: isToday ? glass.bgAccent : "rgba(60,60,60,0.85)",
+                  borderColor: isToday ? glass.borderAccent : "rgba(255,255,255,0.12)",
                 }]}>
                   <Text style={[s.avatarText, { color: isToday ? "#e55a1e" : "#bbb" }]}>
                     {(c.name || "?")[0].toUpperCase()}
@@ -294,28 +294,28 @@ const s = StyleSheet.create({
   statsRow: { flexDirection: "row", gap: 7, marginBottom: 14 },
   statCard: { flex: 1, backgroundColor: glass.bg, borderRadius: 14, padding: 11, alignItems: "center", borderWidth: 0.5, borderColor: glass.border },
   statCardAccent: { borderColor: glass.borderAccent, backgroundColor: glass.bgAccent },
-  statValue: { color: "#f0f0f0", fontSize: 17, fontWeight: "700" },
-  statLabel: { color: "#666", fontSize: 9, marginTop: 3, textAlign: "center" },
+  statValue: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  statLabel: { color: "#bbb", fontSize: 9, marginTop: 3, textAlign: "center" },
 
   quickRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   quickBtn: { flex: 1, backgroundColor: glass.bg, borderRadius: 16, borderWidth: 0.5, borderColor: glass.border, paddingVertical: 14, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 8 },
   quickBtnAccent: { backgroundColor: glass.bgAccent, borderColor: glass.borderAccent },
   quickIcon: { fontSize: 18 },
-  quickLabel: { color: "#ccc", fontSize: 13, fontWeight: "600", flex: 1 },
+  quickLabel: { color: "#fff", fontSize: 13, fontWeight: "600", flex: 1 },
 
   searchWrap: { flexDirection: "row", alignItems: "center", backgroundColor: glass.bg, borderRadius: 14, borderWidth: 0.5, borderColor: glass.border, paddingHorizontal: 12, marginBottom: 12 },
   searchIcon: { fontSize: 15, marginRight: 8 },
-  searchInput: { flex: 1, color: "#e0e0e0", paddingVertical: 13, fontSize: 14 },
+  searchInput: { flex: 1, color: "#fff", paddingVertical: 13, fontSize: 14 },
 
   emptyCard: { backgroundColor: glass.bg, borderRadius: 14, padding: 18, borderWidth: 0.5, borderColor: glass.border, marginBottom: 8 },
-  emptyText: { color: "#888", fontSize: 13 },
+  emptyText: { color: "#bbb", fontSize: 13 },
 
   partnerRow: { flexDirection: "row", alignItems: "center", backgroundColor: glass.bg, borderRadius: 16, padding: 13, marginBottom: 7, borderWidth: 0.5, borderColor: glass.border },
   partnerRowToday: { borderColor: glass.borderAccent, backgroundColor: glass.bgAccent },
   avatar: { width: 42, height: 42, borderRadius: 13, justifyContent: "center", alignItems: "center", marginRight: 11, borderWidth: 0.5 },
   avatarText: { fontSize: 17, fontWeight: "700" },
-  partnerName: { color: "#f0f0f0", fontSize: 15, fontWeight: "600" },
-  partnerCompany: { color: "#777", fontSize: 11, marginTop: 2 },
+  partnerName: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  partnerCompany: { color: "#bbb", fontSize: 11, marginTop: 2 },
   statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 5 },
   chip: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, borderWidth: 0.5 },
   chipText: { fontSize: 9, fontWeight: "600" },
@@ -323,5 +323,5 @@ const s = StyleSheet.create({
   sectionLabel: { color: "#555", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", marginTop: 20, marginBottom: 8 },
   utilRow: { flexDirection: "row", gap: 8 },
   utilBtn: { flex: 1, backgroundColor: glass.bg, borderRadius: 13, padding: 12, alignItems: "center", borderWidth: 0.5, borderColor: glass.border },
-  utilLabel: { color: "#777", fontSize: 10 },
+  utilLabel: { color: "#ddd", fontSize: 10 },
 });
