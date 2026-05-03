@@ -28,7 +28,7 @@ import NfcScreen        from "./src/screens/NfcScreen";
 import CalendarScreen   from "./src/screens/CalendarScreen";
 import LocalSearchScreen from "./src/screens/LocalSearchScreen";
 import BookingScreen     from "./src/screens/BookingScreen";
-import VideoBackground  from "./src/components/VideoBackground";
+import AnimatedBackground from "./src/components/AnimatedBackground";
 import WheelFAB        from "./src/components/WheelFAB";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 
@@ -1188,11 +1188,9 @@ if (screen === "qrShare") {
     { icon: "💰", label: "Pénzügyek", onPress: () => { if (activeContact) { navigate("partnerWorkspace", { contactId: activeContact.id, initialTab: "finance" }); } else { navigate("invoiceList"); } } },
   ];
 
-  // ✅ VideoBackground a HOME screenhez, ImageBackground a többihez
-  const Wrapper = screen === "home" ? VideoBackground : ImageBackground;
-  const wrapperProps = screen === "home"
-    ? { style: { flex: 1 } }
-    : { source: require("./assets/background.png"), style: { flex: 1 }, resizeMode: "cover" };
+  // ✅ AnimatedBackground mindenhol
+  const Wrapper = AnimatedBackground;
+  const wrapperProps = { style: { flex: 1 } };
 
   return (
     <ErrorBoundary>
