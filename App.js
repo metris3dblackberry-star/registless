@@ -7,7 +7,7 @@ import {
   View, Text, TouchableOpacity, Image, ImageBackground,
   Animated, Easing, StyleSheet, Alert, Platform,
   ScrollView, TextInput, KeyboardAvoidingView,
-  SafeAreaView, StatusBar, Linking, Share,
+  SafeAreaView, StatusBar, Linking, Share, BackHandler,
 } from "react-native";
 import { useCameraPermissions } from "expo-camera";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -25,7 +25,11 @@ import SettingsScreen   from "./src/screens/SettingsScreen";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import QrScanScreen     from "./src/screens/QrScanScreen";
 import NfcScreen        from "./src/screens/NfcScreen";
+import CalendarScreen   from "./src/screens/CalendarScreen";
+import LocalSearchScreen from "./src/screens/LocalSearchScreen";
+import BookingScreen     from "./src/screens/BookingScreen";
 import VideoBackground  from "./src/components/VideoBackground";
+import WheelFAB        from "./src/components/WheelFAB";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 
 // Coordinator
@@ -63,7 +67,7 @@ const SELLER_QUICK_ACTIONS = [
   { id: "partner",  icon: "📱", label: "Új partner QR-rel" },
   { id: "nfc",      icon: "📡", label: "NFC partner csere" },
   { id: "service",  icon: "⚡", label: "Új szolgáltatás" },
-  { id: "ocr",      icon: "🔍", label: "OCR import" },
+  { icon: "🔍", label: "Helyi Keresés", onPress: () => navigate("localSearch") },
   { id: "settings", icon: "⚙️", label: "Beállítások" },
 ];
 const BUYER_QUICK_ACTIONS = [
@@ -81,7 +85,9 @@ export default function App() {
   const [activeRole, setActiveRole]       = useState("seller");
   const [ocrUseCase, setOcrUseCase]       = useState("partner");
   const [settingsSection, setSettingsSection] = useState(null);
+  const [initialTab, setInitialTab]           = useState(null);
   const [fabOpen, setFabOpen]             = useState(false);
+  const [screenHistory, setScreenHistory] = useState(["home"]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [appKbHeight, setAppKbHeight]     = useState(0);
   const [invSearch, setInvSearch]         = useState("");
@@ -108,6 +114,18 @@ export default function App() {
           setLicenseStatus(getLicenseStatus(newLicense));
         } else {
           setLicenseStatus(getLicenseStatus(license));
+        }
+        // QR payload frissítése authUser.uid-dal
+       if (!app.sellerQrPayload?.()) {
+          const payload = JSON.stringify({
+            uid:     user.uid,
+            name:    app.sellerName    || "",
+            company: app.sellerCompany || "",
+            phone:   "",
+            email:   user.email        || "",
+            address: app.sellerAddress || "",
+          });
+          app.setSellerQrPayload?.(payload);
         }
       } else {
         setLicenseStatus(null);
@@ -141,6 +159,31 @@ export default function App() {
     }
   }, [app.isHydrated]);
 
+  // ── Android Back Button ──────────────────────────────────────
+  useEffect(() => {
+    const backAction = () => {
+      if (screen !== "home") {
+        setScreenHistory(prev => {
+          const newHistory = prev.length > 1 ? prev.slice(0, -1) : ["home"];
+          const prevScreen = newHistory[newHistory.length - 1] || "home";
+          // Animáció + screen váltás közvetlenül (nem navigate, hogy ne push-oljon)
+          slideAnim.setValue(18);
+          fadeAnim.setValue(0);
+          setScreen(prevScreen);
+          Animated.parallel([
+            Animated.timing(slideAnim, { toValue: 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+            Animated.timing(fadeAnim,  { toValue: 1, duration: 200, useNativeDriver: true }),
+          ]).start();
+          return newHistory;
+        });
+        return true;
+      }
+      return false; // home screenen engedjük az app kilépést
+    };
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
+    return () => backHandler.remove();
+  }, [screen, screenHistory]);
+
   // ── Push értesítések ──────────────────────────────────────────
   useEffect(() => {
     if (!app.isHydrated || !app.sellerUid) return;
@@ -172,7 +215,13 @@ export default function App() {
     if (opts.role !== undefined)           setActiveRole(opts.role);
     if (opts.ocrUseCase !== undefined)     setOcrUseCase(opts.ocrUseCase);
     if (opts.settingsSection !== undefined) setSettingsSection(opts.settingsSection);
+    if (opts.initialTab !== undefined) setInitialTab(opts.initialTab || null);
     setScreen(to);
+    // ← screenHistory frissítése: ne duplikálj ha ugyanaz a screen
+    setScreenHistory(prev => {
+      if (prev[prev.length - 1] === to) return prev;
+      return [...prev, to];
+    });
     Animated.parallel([
       Animated.timing(slideAnim, { toValue: 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       Animated.timing(fadeAnim,  { toValue: 1, duration: 200, useNativeDriver: true }),
@@ -187,6 +236,7 @@ export default function App() {
   const STRIPE_FUNCTION_URL = "https://europe-west1-registless.cloudfunctions.net/createStripeCheckout";
 
   async function handlePaymentRequest(contactId, invoiceId) {
+    // VEVŐ fizet Stripe-on keresztül
     const contact = app.getContactById(contactId);
     if (!contact) return;
     let amount = 0;
@@ -198,15 +248,13 @@ export default function App() {
       amount = (contact.openItems || []).reduce((s, oi) => s + (oi.brutto || oi.amount || 0), 0);
       label  = app.sellerName || "Registless";
     }
-    const revolutUsername = app.sellerBankAccount?.startsWith("@")
-      ? app.sellerBankAccount.replace("@", "") : null;
     const amountFt = amount.toLocaleString("hu-HU");
     Alert.alert(
-      "💳 Fizetési kérés küldése",
-      `Összeg: ${amountFt} Ft\nPartner: ${contact.name}\n\nVálassz fizetési módot:`,
+      "💳 Számla kifizetése",
+      `Összeg: ${amountFt} Ft`,
       [
         { text: "Mégse", style: "cancel" },
-        { text: "🔵 Stripe", onPress: async () => {
+        { text: "💳 Fizetés Stripe-on", onPress: async () => {
           try {
             const resp = await fetch(STRIPE_FUNCTION_URL, {
               method: "POST",
@@ -214,21 +262,40 @@ export default function App() {
               body: JSON.stringify({ amount: Math.round(amount * 100), invoiceId: label, sellerName: app.sellerName || "Registless", contactName: contact.name }),
             });
             const data = await resp.json();
-            if (data.url) {
-              Linking.openURL(data.url).catch(() => Alert.alert("Hiba", "Nem sikerült megnyitni a Stripe oldalt."));
-              app.addActivityToContact(contactId, makeActivity(ActivityType.PAYMENT_REQUESTED, `Stripe fizetési kérés: ${amountFt} Ft`, { invoiceId, amount, method: "stripe" }));
+            if (data?.url) await Linking.openURL(data.url);
+            else Alert.alert("Hiba", data?.error || "Nem sikerült a Stripe checkout.");
+          } catch (e) {
+            Alert.alert("Hiba", e.message);
+          }
+        }},
+      ]
+    );
+  }
+
+  async function handleSendPaymentReminder(contactId, unpaidInvoices = []) {
+    // ELADÓ küld push emlékeztetőt a Vevőnek
+    const contact = app.getContactById(contactId);
+    if (!contact) return;
+    const total = unpaidInvoices.reduce((s, i) => s + Number(i.bruttoOsszesen || 0), 0);
+    const invoiceList = unpaidInvoices.map(i => `${i.id}: ${Number(i.bruttoOsszesen||0).toLocaleString("hu-HU")} Ft`).join(", ");
+    const pushBody = unpaidInvoices.length > 0
+      ? `Nyitott számla(k): ${invoiceList} — Összesen: ${total.toLocaleString("hu-HU")} Ft`
+      : `Nyitott tételei vannak. Kérjük rendezze egyenlegét.`;
+    Alert.alert(
+      "📨 Fizetési emlékeztető küldése",
+      `Vevő: ${contact.name}\n${pushBody}`,
+      [
+        { text: "Mégse", style: "cancel" },
+        { text: "📨 Push küldése", onPress: async () => {
+          try {
+            const partnerToken = await getPushToken(contact.registlessUid).catch(() => null);
+            if (partnerToken) {
+              await sendPushToUser(partnerToken, "📨 Fizetési emlékeztető", pushBody, { screen: "invoiceList" });
+              Alert.alert("✅ Elküldve", "A fizetési emlékeztető el lett küldve.");
             } else {
-              Alert.alert("Stripe hiba", data.error || "Ismeretlen hiba");
+              Alert.alert("⚠️ Nem küldhető", "A partnernek nincs aktív push token.");
             }
-          } catch (e) { Alert.alert("Hiba", "Nem sikerült kapcsolódni."); }
-        }},
-        { text: "🟠 Simple", onPress: () => {
-          Linking.openURL("https://simplepay.hu").catch(() => {});
-          app.addActivityToContact(contactId, makeActivity(ActivityType.PAYMENT_REQUESTED, `Simple fizetési kérés: ${amountFt} Ft`, { invoiceId, amount, method: "simple" }));
-        }},
-        { text: "💜 Revolut", onPress: () => {
-          Linking.openURL(revolutUsername ? `https://revolut.me/${revolutUsername}` : "https://revolut.com").catch(() => {});
-          app.addActivityToContact(contactId, makeActivity(ActivityType.PAYMENT_REQUESTED, `Revolut fizetési kérés: ${amountFt} Ft`, { invoiceId, amount, method: "revolut" }));
+          } catch (e) { Alert.alert("Hiba", e.message); }
         }},
       ]
     );
@@ -364,13 +431,12 @@ export default function App() {
     const badge = licenseStatus ? getLicenseBadge(licenseStatus) : null;
     content = (
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={s.homeScreen}>
-          <Image source={require("./assets/logo.png")} style={s.logo} resizeMode="contain" />
+        <View style={{ position: "absolute", bottom: 120, left: 24, right: 24, alignItems: "center", gap: 10 }}>
 
           {badge && (
             <TouchableOpacity
               onPress={() => setShowUpgrade(true)}
-              style={{ backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 8 }}
+              style={{ backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 6 }}
             >
               <Text style={{ color: badge.color, fontWeight: "bold", fontSize: 13 }}>
                 {badge.text} {licenseStatus?.plan !== "pro" ? "· Frissítés →" : ""}
@@ -394,20 +460,18 @@ export default function App() {
             <Text style={shared.btnTextPrimary}>VEVŐ</Text>
           </TouchableOpacity>
 
-          <View style={{ alignItems: "center", marginTop: 8 }}>
-            {/* ✅ FIX: Megosztás → qrShare (nem settings) */}
-            <TouchableOpacity style={s.shareBtn} onPress={() => navigate("qrShare")}>
-              <Image source={require("./assets/share_icon.jpg")} style={s.shareIcon} />
-              <Text style={s.shareLabel}>Megosztás</Text>
-            </TouchableOpacity>
-            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>
-              {authUser?.email}
-            </Text>
-            <TouchableOpacity onPress={() => { logout(); setAuthUser(null); }}>
-              <Text style={{ color: "#888", fontSize: 12, marginTop: 4 }}>Kijelentkezés</Text>
-            </TouchableOpacity>
-            <Text style={s.poweredBy}>Powered by Star Labs Kft. · All rights reserved</Text>
-          </View>
+          <TouchableOpacity style={s.shareBtn} onPress={() => navigate("qrShare")}>
+            <Image source={require("./assets/share_icon.jpg")} style={s.shareIcon} />
+            <Text style={s.shareLabel}>{"Registless\nMegosztása"}</Text>
+          </TouchableOpacity>
+
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{authUser?.email}</Text>
+
+          <TouchableOpacity onPress={() => { logout(); setAuthUser(null); }}>
+            <Text style={{ color: "#888", fontSize: 12 }}>Kijelentkezés</Text>
+          </TouchableOpacity>
+
+          <Text style={s.poweredBy}>Powered by Star Labs Kft. · All rights reserved</Text>
         </View>
       </SafeAreaView>
     );
@@ -431,6 +495,8 @@ export default function App() {
           onInvoices={() => navigate("invoiceList")}
           onSettings={(sec) => navigate("settings", { settingsSection: sec || null })}
           onHome={() => navigate("home")}
+          onOcr={() => navigate("ocr", { ocrUseCase: "partner" })}
+          onQrProfile={() => navigate("qrProfile")}
         />
       </SafeAreaView>
     );
@@ -463,8 +529,11 @@ export default function App() {
     content = (
       <SafeAreaView style={{ flex: 1, width: "100%" }}>
         <PartnerWorkspace
+          initialTab={initialTab}
           contact={activeContact}
-          myUid={activeRole === "seller" ? app.sellerUid : app.buyerUid}
+         myUid={activeRole === "seller" 
+  	    ? (app.sellerUid || authUser?.uid || "") 
+	    : (app.buyerUid  || authUser?.uid || "")}
           partnerUid={activeContact.registlessUid}
           myRole={activeRole}
           onBack={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}
@@ -473,8 +542,24 @@ export default function App() {
           onAcceptBooking={(req) => handleAcceptBooking(activeContact.id, req)}
           onIssueInvoice={() => issueInvoice({
             contactId: activeContact.id,
+            taxType: app.sellerTaxType || "kata",
             getContactById: app.getContactById,
-            addInvoiceToContact: app.addInvoiceToContact,
+            addInvoiceToContact: async (contactId, invoice) => {
+              app.addInvoiceToContact(contactId, invoice);
+              // Szinkronizálás a vevő RTDB-re — hogy a vevő is lássa a számlát
+              const contact = app.getContactById(contactId);
+              if (contact?.registlessUid && !contact.registlessUid.startsWith("uid-ocr")) {
+                try {
+                  const { rtdb } = await import("./firebase");
+                  const buyerInvoices = await rtdb.ref(`appState/${contact.registlessUid}/receivedInvoices`).once("value");
+                  const existing = buyerInvoices.val() || [];
+                  await rtdb.ref(`appState/${contact.registlessUid}/receivedInvoices`).set([invoice, ...existing]);
+                  // Push értesítés a vevőnek
+                  const token = await getPushToken(contact.registlessUid).catch(() => null);
+                  if (token) sendPushToUser(token, "📄 Új számla érkezett", `${invoice.id} · ${Number(invoice.bruttoOsszesen||0).toLocaleString("hu-HU")} Ft`, { screen: "invoiceList" });
+                } catch (e) { console.log("[Invoice sync]", e.message); }
+              }
+            },
             addActivityToContact: app.addActivityToContact,
             nextInvoiceNumber: app.nextInvoiceNumber,
             sellerProfile: {
@@ -484,12 +569,19 @@ export default function App() {
             },
           })}
           onPayment={(invoiceId) => handlePaymentRequest(activeContact.id, invoiceId)}
+          onSendPaymentReminder={(invs) => handleSendPaymentReminder(activeContact.id, invs)}
           onMessageSent={async (text) => {
             const partnerToken = await getPushToken(activeContact.registlessUid).catch(() => null);
             if (partnerToken) sendPushToUser(partnerToken, `💬 Új üzenet — ${app.sellerName || "Registless"}`, text.length > 60 ? text.substring(0, 60) + "..." : text, { screen: "partnerWorkspace" });
           }}
           onInvoicePaid={async (invoiceId, amount) => {
             sendLocalNotification("✅ Számla kifizetve!", `${invoiceId} · ${amount?.toLocaleString("hu-HU")} Ft`);
+          }}
+          onRemoveOpenItem={(itemId) => {
+            if (!activeContact) return;
+            const contact = app.getContactById(activeContact.id);
+            const updated = (contact?.openItems || []).filter(oi => oi.id !== itemId);
+            app.updateContact(activeContact.id, { openItems: updated });
           }}
         />
       </SafeAreaView>
@@ -498,19 +590,36 @@ export default function App() {
 
   // ── New Booking ───────────────────────────────────────────────
   if (screen === "newBooking") {
-    content = <NewBookingScreen
-      contact={activeContact}
-      onSubmit={(req) => {
-        if (activeContact) {
-          app.addActivityToContact(activeContact.id, makeActivity(ActivityType.BOOKING_REQUEST, `Időpont kérés: ${req.serviceName} – ${req.datum} ${req.ido}`, { request: req }));
-          const contact = app.getContactById(activeContact.id);
-          app.updateContact(activeContact.id, { bookingRequests: [req, ...(contact?.bookingRequests || [])] });
-        }
-        Alert.alert("✅ Elküldve", "Az időpont kérés el lett küldve.", [{ text: "OK" }]);
-        navigate("partnerWorkspace");
-      }}
-      onBack={() => navigate("partnerWorkspace")}
-    />;
+    content = (
+      <BookingScreen
+        contact={activeContact}
+        onSubmit={async (req) => {
+          if (activeContact) {
+            app.addActivityToContact(activeContact.id, makeActivity(ActivityType.BOOKING_REQUEST, `Időpont kérés: ${req.datum} ${req.ido} (${req.duration} perc)`, { request: req }));
+            const contact = app.getContactById(activeContact.id);
+            app.updateContact(activeContact.id, { bookingRequests: [{ ...req, id: `req-${Date.now()}`, statusz: "függőben", createdAt: Date.now() }, ...(contact?.bookingRequests || [])] });
+            // Push értesítés az eladónak
+            if (activeContact.registlessUid && !activeContact.registlessUid.startsWith("uid-ocr")) {
+              try {
+                const token = await getPushToken(activeContact.registlessUid);
+                if (token) {
+                  await sendPushToUser(token,
+                    "📅 Új időpont kérés",
+                    `${app.buyerName || "Vevő"}: ${req.datum} ${req.ido || ""} (${(req.duration||60)} perc)`,
+                    { screen: "partnerWorkspace" }
+                  );
+                }
+              } catch {}
+            } else {
+              console.log("[Booking] OCR partner — push nem küldhető, nincs valódi UID");
+            }
+          }
+          Alert.alert("✅ Elküldve", "Az időpont kérés el lett küldve.", [{ text: "OK" }]);
+          navigate("partnerWorkspace");
+        }}
+        onBack={() => navigate("partnerWorkspace")}
+      />
+    );
   }
 
   // ── New Service ───────────────────────────────────────────────
@@ -533,7 +642,7 @@ export default function App() {
       onAddToQuickList={(qs) => {
         try {
           if (typeof app.addQuickService === "function") {
-            app.addQuickService(qs);
+            app.addQuickService(qs.name, qs.amount);
           } else {
             console.warn("[QuickService] addQuickService not available");
           }
@@ -544,67 +653,37 @@ export default function App() {
       onBack={() => activeContact ? navigate("partnerWorkspace") : navigate("sellerDashboard")}
     />;
   }
+if (screen === "qrShare") {
+  content = (
+    <SafeAreaView style={{ flex: 1, width: "100%" }}>
+      <ScrollView contentContainerStyle={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <Text style={{ color: "#fff", fontSize: 22, fontWeight: "bold", marginBottom: 8, textAlign: "center" }}>
+          📱 Registless Letöltése
+        </Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: "center", marginBottom: 32 }}>
+          Olvasd be a QR kódot az app letöltéséhez
+        </Text>
 
-  if (screen === "qrShare") {
-    // QR payload: JSON string with full profile so partner scan gets real data
-    const myUid = app.sellerUid || authUser?.uid || "";
-    const qrPayload = app.sellerQrPayload || JSON.stringify({
-      uid: myUid,
-      name: app.sellerName || app.buyerName || "",
-      company: app.sellerCompany || app.buyerCompany || "",
-      phone: "",
-      email: authUser?.email || "",
-      address: app.sellerAddress || app.buyerAddress || "",
-    });
-    const qrValue = qrPayload && qrPayload.length > 2 ? qrPayload : null;
-    const shareText  = `Adj hozzá engem a Registless appban!\n\nNévjegy: ${app.sellerName || app.buyerName || ""}\n${app.sellerCompany ? app.sellerCompany + "\n" : ""}Registless ID: ${myUid}\n\nhttps://registless.ai`;
-    content = (
-      <SafeAreaView style={{ flex: 1, width: "100%" }}>
-        <ScrollView contentContainerStyle={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
-          <Text style={{ color: "#fff", fontSize: 22, fontWeight: "bold", marginBottom: 8, textAlign: "center" }}>
-            📱 Saját QR kódom
+        <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 24, shadowColor: "#ff7a1a", shadowOpacity: 0.4, shadowRadius: 24, elevation: 16 }}>
+          <QRCode value="https://registless.ai" size={220} color="#111" backgroundColor="#fff" />
+        </View>
+
+        <View style={{ marginTop: 28, alignItems: "center" }}>
+          <Text style={{ color: "#fff", fontSize: 18, fontWeight: "bold" }}>
+            Registless Letöltése
           </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: "center", marginBottom: 32 }}>
-            Mutasd ezt a kódot — a partner beolvasva hozzáad téged
+          <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 4 }}>
+            https://registless.ai
           </Text>
+        </View>
 
-          <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 24, shadowColor: "#ff7a1a", shadowOpacity: 0.4, shadowRadius: 24, elevation: 16 }}>
-            {qrValue ? (
-              <QRCode value={qrValue} size={220} color="#111" backgroundColor="#fff" />
-            ) : (
-              <View style={{ width: 220, height: 220, backgroundColor: "#f5f5f5", borderRadius: 8, justifyContent: "center", alignItems: "center" }}>
-                <Text style={{ color: "#888", fontSize: 13, textAlign: "center", paddingHorizontal: 16 }}>
-                  {"Töltsd ki a Beállításokban a nevedet,\nhogy megjelenjen a QR kód."}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          <View style={{ marginTop: 28, alignItems: "center" }}>
-            <Text style={{ color: "#fff", fontSize: 18, fontWeight: "bold" }}>
-              {app.sellerName || app.buyerName || "Névtelen"}
-            </Text>
-            {!!(app.sellerCompany || app.buyerCompany) && (
-              <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 4 }}>
-                {app.sellerCompany || app.buyerCompany}
-              </Text>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[shared.btnPrimary, { marginTop: 32, width: "100%" }]}
-            onPress={() => Share.share({ message: shareText }).catch(() => {})}
-          >
-            <Text style={shared.btnTextPrimary}>📤  Megosztás másnak</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[shared.btnOutline, { width: "100%" }]} onPress={() => navigate("home")}>
-            <Text style={shared.btnTextSecondary}>VISSZA</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
+        <TouchableOpacity style={[shared.btnOutline, { width: "100%", marginTop: 32 }]} onPress={() => navigate("home")}>
+          <Text style={shared.btnTextSecondary}>VISSZA</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
 
   // ── QR Scan — Új partner beolvasása ──────────────────────────
   if (screen === "qrScan") {
@@ -623,12 +702,12 @@ export default function App() {
           }
           const newContact = {
             id:               `c-${Date.now()}`,
-            name:             data.name     || "Ismeretlen",
-            company:          data.company  || "",
+            name: data.name || data.n || "Ismeretlen",
+	    company: data.company || data.c || "",
             phone:            data.phone    || "",
             email:            data.email    || "",
             address:          data.address  || "",
-            registlessUid:    data.uid      || data.registlessUid || null,
+           registlessUid: data.uid || data.id || data.registlessUid || null,
             myRoleInRelation: activeRole,
             openItems: [], invoices: [], appointments: [],
             bookingRequests: [], calendar: [], messages: [],
@@ -691,6 +770,74 @@ export default function App() {
     );
   }
 
+  // ── QR Profil — saját profil QR megjelenítése ────────────────
+  if (screen === "qrProfile") {
+    // sellerQrPayload egy függvény — hívni kell
+    const _qrRaw = typeof app.sellerQrPayload === "function"
+      ? app.sellerQrPayload()
+      : app.sellerQrPayload;
+    const qrPayload = (_qrRaw && _qrRaw.length > 5)
+      ? _qrRaw
+      : (app.sellerName || authUser?.uid)
+        ? JSON.stringify({
+            uid:     authUser?.uid     || "",
+            name:    app.sellerName    || "",
+            company: app.sellerCompany || "",
+            email:   authUser?.email   || "",
+            phone:   "",
+            address: app.sellerAddress || "",
+          })
+        : "REGISTLESS";
+    content = (
+      <SafeAreaView style={{ flex: 1, width: "100%" }}>
+        <ScrollView contentContainerStyle={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
+          <Text style={{ color: "#fff", fontSize: 22, fontWeight: "bold", marginBottom: 4, textAlign: "center" }}>
+            📱 Saját QR kód
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: "center", marginBottom: 28 }}>
+            Mutasd ezt a kódot partnereidnek — ők beolvasva automatikusan felvesznek
+          </Text>
+          <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 24, shadowColor: "#ff7a1a", shadowOpacity: 0.4, shadowRadius: 24, elevation: 16 }}>
+            <QRCode
+              value={qrPayload}
+              size={220}
+              color="#111"
+              backgroundColor="#fff"
+            />
+          </View>
+          <View style={{ marginTop: 24, alignItems: "center", gap: 4 }}>
+            {!!app.sellerName    && <Text style={{ color: "#fff",  fontSize: 17, fontWeight: "bold"  }}>{app.sellerName}</Text>}
+            {!!app.sellerCompany && <Text style={{ color: "#aaa",  fontSize: 14 }}>{app.sellerCompany}</Text>}
+            {!!authUser?.email   && <Text style={{ color: "#666",  fontSize: 12 }}>{authUser.email}</Text>}
+          </View>
+          <TouchableOpacity
+            style={[shared.btnOutline, { width: "100%", marginTop: 28 }]}
+            onPress={() => {
+              Share.share({
+                message: `Csatlakozz hozzám a Registless-en!\nNevem: ${app.sellerName || ""}\n${authUser?.email || ""}`,
+                title: "Registless profil megosztása",
+              }).catch(() => {});
+            }}
+          >
+            <Text style={shared.btnTextSecondary}>📤 Profil megosztása</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[shared.btnOutline, { width: "100%", marginTop: 10 }]} onPress={() => navigate("sellerDashboard")}>
+            <Text style={shared.btnTextSecondary}>← Vissza</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Local Search ──────────────────────────────────────────────
+  if (screen === "localSearch") {
+    content = (
+      <LocalSearchScreen
+        onBack={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}
+      />
+    );
+  }
+
   // ── OCR ───────────────────────────────────────────────────────
   if (screen === "ocr") {
     content = (
@@ -723,9 +870,11 @@ export default function App() {
           buyerQrPayload={app.buyerQrPayload}
           selectedPaymentMethod={app.selectedPaymentMethod}
           setSelectedPaymentMethod={app.setSelectedPaymentMethod}
-          onOcr={() => navigate("ocr", { ocrUseCase: "profile" })}
+          onOcr={() => navigate("ocr", { ocrUseCase: "partner" })}
           onResetAll={handleResetAll}
           onRestartOnboarding={() => { AsyncStorage.removeItem(ONBOARDING_KEY); setShowOnboarding(true); }}
+	  sellerTaxType={app.sellerTaxType}
+	  setSellerTaxType={app.setSellerTaxType}
           onBack={() => navigate(activeRole === "seller" ? "sellerDashboard" : activeRole === "buyer" ? "buyerDashboard" : "home")}
           initialSection={settingsSection}
         />
@@ -739,9 +888,27 @@ export default function App() {
     content = (
       <SafeAreaView style={{ flex: 1, width: "100%" }}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
-          <Text style={{ color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 20, paddingTop: 48 }}>
-            {activeRole === "seller" ? "Partnereim" : "Kapcsolataim"}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20, paddingTop: 48 }}>
+            <Text style={{ color: "#fff", fontSize: 24, fontWeight: "bold" }}>
+              {activeRole === "seller" ? "Partnereim" : "Kapcsolataim"}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                style={{ backgroundColor: "rgba(255,122,26,0.15)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "rgba(255,122,26,0.4)", flexDirection: "row", alignItems: "center", gap: 6 }}
+                onPress={() => navigate("qrScan", { role: activeRole })}
+              >
+                <Text style={{ fontSize: 16 }}>📷</Text>
+                <Text style={{ color: "#ff7a1a", fontSize: 13, fontWeight: "600" }}>QR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ backgroundColor: "rgba(79,195,247,0.15)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "rgba(79,195,247,0.4)", flexDirection: "row", alignItems: "center", gap: 6 }}
+                onPress={() => navigate("ocr", { ocrUseCase: "partner" })}
+              >
+                <Text style={{ fontSize: 16 }}>🔍</Text>
+                <Text style={{ color: "#4fc3f7", fontSize: 13, fontWeight: "600" }}>OCR</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
           {contacts.length === 0 ? (
             <View style={{ backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 20, padding: 32, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }}>
               <Text style={{ fontSize: 48, marginBottom: 12 }}>👥</Text>
@@ -772,7 +939,7 @@ export default function App() {
                   style={{ marginLeft: 8, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,50,50,0.15)", borderWidth: 1, borderColor: "rgba(255,50,50,0.3)", justifyContent: "center", alignItems: "center" }}
                   onPress={() => Alert.alert("Partner törlése", `Biztosan törlöd: ${c.name}?`, [
                     { text: "Nem", style: "cancel" },
-                    { text: "Törlöm", style: "destructive", onPress: () => app.removeContact?.(c.id) },
+                    { text: "Törlöm", style: "destructive", onPress: () => app.deleteContact?.(c.id) },
                   ])}
                 >
                   <Text style={{ fontSize: 18 }}>🗑</Text>
@@ -790,32 +957,51 @@ export default function App() {
 
   // ── Üzenetek lista ────────────────────────────────────────────
   if (screen === "messagesList") {
-    const contacts = activeRole === "seller" ? sellerContacts : buyerContacts;
+    const msgContacts = (activeRole === "seller" ? sellerContacts : buyerContacts)
+      .filter(c => c.channels?.chat || (c.messages || []).length > 0);
     content = (
       <SafeAreaView style={{ flex: 1, width: "100%" }}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingTop: 16 }}>
-          <Text style={{ color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 20, paddingTop: 48 }}>Üzenetek</Text>
-          {contacts.length === 0 ? (
-            <View style={{ backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 20, padding: 32, alignItems: "center" }}>
-              <Text style={{ fontSize: 40, marginBottom: 12 }}>💬</Text>
-              <Text style={{ color: "#fff", textAlign: "center" }}>Még nincs üzeneted.</Text>
+        <View style={{ paddingTop: 52, paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" }}>
+          <Text style={{ color: "#fff", fontSize: 24, fontWeight: "bold" }}>💬 Üzenetek</Text>
+          <Text style={{ color: "#888", fontSize: 12, marginTop: 2 }}>{msgContacts.length} aktív beszélgetés</Text>
+        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
+          {msgContacts.length === 0 ? (
+            <View style={{ padding: 40, alignItems: "center" }}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>💬</Text>
+              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "bold", textAlign: "center" }}>Még nincs üzeneted</Text>
+              <Text style={{ color: "#888", fontSize: 14, textAlign: "center", marginTop: 8 }}>Nyisd meg egy partner munkaterét és küldj üzenetet!</Text>
             </View>
           ) : (
-            contacts.map((c) => (
-              <TouchableOpacity key={c.id}
-                style={{ backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", flexDirection: "row", alignItems: "center" }}
-                onPress={() => navigate("partnerWorkspace", { contactId: c.id, role: activeRole })}
-              >
-                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(0,188,212,0.15)", borderWidth: 1, borderColor: "rgba(0,188,212,0.3)", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
-                  <Text style={{ color: "#00BCD4", fontSize: 18, fontWeight: "bold" }}>{(c.name || "?")[0].toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{c.name}</Text>
-                  {!!c.company && <Text style={{ color: "#888", fontSize: 12, marginTop: 2 }}>{c.company}</Text>}
-                </View>
-                <Text style={{ color: "#888", fontSize: 18 }}>›</Text>
-              </TouchableOpacity>
-            ))
+            msgContacts.map((c) => {
+              const lastMsg = (c.messages || []).slice(-1)[0];
+              const hasUnread = (c.messages || []).some(m => !m.read && m.senderUid !== (activeRole === "seller" ? app.sellerUid : app.buyerUid));
+              return (
+                <TouchableOpacity key={c.id}
+                  style={{ flexDirection: "row", alignItems: "center", padding: 16, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)", backgroundColor: hasUnread ? "rgba(255,122,26,0.05)" : "transparent" }}
+                  onPress={() => navigate("partnerWorkspace", { contactId: c.id, role: activeRole, initialTab: "chat" })}
+                >
+                  {/* Avatar */}
+                  <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: hasUnread ? "rgba(255,122,26,0.2)" : "rgba(0,188,212,0.15)", borderWidth: 2, borderColor: hasUnread ? "#ff7a1a" : "rgba(0,188,212,0.3)", justifyContent: "center", alignItems: "center", marginRight: 14 }}>
+                    <Text style={{ color: hasUnread ? "#ff7a1a" : "#00BCD4", fontSize: 20, fontWeight: "bold" }}>{(c.name || "?")[0].toUpperCase()}</Text>
+                  </View>
+                  {/* Info */}
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                      <Text style={{ color: "#fff", fontSize: 16, fontWeight: hasUnread ? "700" : "600" }}>{c.name}</Text>
+                      {lastMsg && <Text style={{ color: "#555", fontSize: 11 }}>{new Date(lastMsg.timestamp || lastMsg.sentAt).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" })}</Text>}
+                    </View>
+                    {!!c.company && <Text style={{ color: "#666", fontSize: 12, marginTop: 1 }}>{c.company}</Text>}
+                    {lastMsg && (
+                      <Text style={{ color: hasUnread ? "#ccc" : "#666", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
+                        {lastMsg.type === "image" ? "📷 Kép" : lastMsg.type === "invoice" ? "📄 Számla" : lastMsg.text || ""}
+                      </Text>
+                    )}
+                  </View>
+                  {hasUnread && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#ff7a1a", marginLeft: 8 }} />}
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
         <TouchableOpacity style={s.floatingBack} onPress={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}>
@@ -880,7 +1066,51 @@ export default function App() {
             ) : filtered.map((inv) => (
               <TouchableOpacity key={inv.id}
                 style={{ backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: inv.statusz === "PAID" ? "rgba(76,175,80,0.4)" : "rgba(255,152,0,0.3)" }}
-                onPress={() => navigate("partnerWorkspace", { contactId: inv.contactId, role: activeRole })}
+                onPress={() => {
+                  const contact = app.getContactById(inv.contactId);
+                  Alert.alert(
+                    inv.id,
+                    `${inv.contactName} · ${inv.datum}\n${(inv.bruttoOsszesen || 0).toLocaleString("hu-HU")} Ft`,
+                    [
+                      {
+                        text: "📄 PDF generálás",
+                        onPress: async () => {
+                          try {
+                            const { buildInvoiceHtml, calcLine, calcTotals } = require("./src/services/invoice");
+                            const tetelek = (inv.tetelek || []).length > 0 ? inv.tetelek :
+                              (contact?.openItems || []).map(oi => calcLine(oi.serviceName || "Szolgáltatás", 1, oi.netto || oi.nettoAmount || Math.round((oi.amount || 0) / 1.27)));
+                            const html = buildInvoiceHtml({
+                              seller: { name: app.sellerName, company: app.sellerCompany, address: app.sellerAddress, taxNumber: app.sellerTaxNumber, bankAccount: app.sellerBankAccount },
+                              buyer: { name: inv.contactName, company: contact?.company || "", address: contact?.address || "" },
+                              items: tetelek,
+                              invoiceId: inv.id,
+                              date: inv.datum,
+                              taxType: app.sellerTaxType || "kata",
+                            });
+                            const Print = require("expo-print");
+                            const { uri } = await Print.printToFileAsync({ html });
+                            const Sharing = require("expo-sharing");
+                            if (await Sharing.isAvailableAsync()) {
+                              await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `${inv.id}` });
+                            }
+                          } catch(e) { Alert.alert("Hiba", e.message); }
+                        }
+                      },
+                      {
+                        text: "📤 Megosztás",
+                        onPress: () => {
+                          const { Share } = require("react-native");
+                          Share.share({
+                            message: `Számla: ${inv.id}\nDátum: ${inv.datum}\nPartner: ${inv.contactName}\nÖsszeg: ${(inv.bruttoOsszesen || 0).toLocaleString("hu-HU")} Ft`,
+                            title: inv.id,
+                          });
+                        }
+                      },
+                      { text: "Partner megnyitása", onPress: () => navigate("partnerWorkspace", { contactId: inv.contactId, role: activeRole }) },
+                      { text: "Mégse", style: "cancel" },
+                    ]
+                  );
+                }}
               >
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                   <View style={{ flex: 1 }}>
@@ -892,6 +1122,7 @@ export default function App() {
                     <View style={{ backgroundColor: inv.statusz === "PAID" ? "rgba(76,175,80,0.2)" : "rgba(255,152,0,0.2)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 }}>
                       <Text style={{ color: inv.statusz === "PAID" ? "#4CAF50" : "#FF9800", fontSize: 11, fontWeight: "bold" }}>{inv.statusz === "PAID" ? "✅ FIZETVE" : "🟠 NYITOTT"}</Text>
                     </View>
+                    <Text style={{ color: "#555", fontSize: 10, marginTop: 2 }}>Koppints a műveletekért</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -907,51 +1138,16 @@ export default function App() {
 
   // ── Időpontok ─────────────────────────────────────────────────
   if (screen === "todaySchedule" || screen === "appointments") {
-    const contacts  = activeRole === "seller" ? sellerContacts : buyerContacts;
-    const today     = new Date();
-    const todayStr  = `${String(today.getMonth()+1).padStart(2,"0")}.${String(today.getDate()).padStart(2,"0")}`;
-    const allAppts  = contacts.flatMap(c => {
-      const appts = activeRole === "seller" ? (c.appointments || []) : (c.calendar || []);
-      return appts.map(a => ({ ...a, contactName: c.name, contactId: c.id }));
-    }).sort((a, b) => (a.ido || "").localeCompare(b.ido || ""));
-    const todayAppts  = allAppts.filter(a => a.datum === todayStr);
-    const futureAppts = allAppts.filter(a => a.datum !== todayStr);
+    const calContacts = activeRole === "seller" ? sellerContacts : buyerContacts;
     content = (
-      <SafeAreaView style={{ flex: 1, width: "100%" }}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingTop: 16 }}>
-          <Text style={{ color: "#fff", fontSize: 24, fontWeight: "bold", marginBottom: 20, paddingTop: 48 }}>
-            {screen === "todaySchedule" ? "Mai nap" : "Időpontjaim"}
-          </Text>
-          {todayAppts.length > 0 && (<>
-            <Text style={{ color: "#ff7a1a", fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>📅 MA</Text>
-            {todayAppts.map((a) => (
-              <TouchableOpacity key={a.id} style={{ backgroundColor: "rgba(255,122,26,0.1)", borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "rgba(255,122,26,0.3)" }} onPress={() => navigate("partnerWorkspace", { contactId: a.contactId, role: activeRole })}>
-                <Text style={{ color: "#fff", fontSize: 16, fontWeight: "bold" }}>{a.ido} — {a.serviceName}</Text>
-                <Text style={{ color: "#888", marginTop: 4 }}>👤 {a.contactName}</Text>
-                {a.amount > 0 && <Text style={{ color: "#ff7a1a", marginTop: 4 }}>{a.amount.toLocaleString("hu-HU")} Ft</Text>}
-              </TouchableOpacity>
-            ))}
-          </>)}
-          {futureAppts.length > 0 && (<>
-            <Text style={{ color: "#888", fontSize: 14, fontWeight: "bold", marginBottom: 10, marginTop: 8 }}>KÖZELGŐ</Text>
-            {futureAppts.map((a) => (
-              <TouchableOpacity key={a.id} style={{ backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }} onPress={() => navigate("partnerWorkspace", { contactId: a.contactId, role: activeRole })}>
-                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>{a.datum} {a.ido} — {a.serviceName}</Text>
-                <Text style={{ color: "#888", marginTop: 4 }}>👤 {a.contactName}</Text>
-              </TouchableOpacity>
-            ))}
-          </>)}
-          {allAppts.length === 0 && (
-            <View style={{ backgroundColor: "rgba(20,20,20,0.5)", borderRadius: 20, padding: 32, alignItems: "center" }}>
-              <Text style={{ fontSize: 40, marginBottom: 12 }}>📅</Text>
-              <Text style={{ color: "#fff", textAlign: "center" }}>Még nincs időpont.</Text>
-            </View>
-          )}
-        </ScrollView>
-        <TouchableOpacity style={s.floatingBack} onPress={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}>
-          <Image source={require("./assets/backbutton.png")} style={s.floatingBackImg} />
-        </TouchableOpacity>
-      </SafeAreaView>
+      <CalendarScreen
+        contacts={calContacts}
+        activeRole={activeRole}
+        onDayPress={(appt) => {
+          if (appt.contactId) navigate("partnerWorkspace", { contactId: appt.contactId, role: activeRole });
+        }}
+        onBack={() => navigate(activeRole === "seller" ? "sellerDashboard" : "buyerDashboard")}
+      />
     );
   }
 
@@ -968,7 +1164,29 @@ export default function App() {
   }
 
   const quickActions = activeRole === "seller" ? SELLER_QUICK_ACTIONS : BUYER_QUICK_ACTIONS;
-  const showFab      = ["sellerDashboard", "buyerDashboard", "partnerWorkspace"].includes(screen);
+  const showFab = ["sellerDashboard", "buyerDashboard", "partnerWorkspace", "home", "invoiceList", "todaySchedule", "appointments", "partnerList", "messagesList", "localSearch", "newBooking", "ocr"].includes(screen);
+
+  // Süti wheel items - szerepfüggő
+  const wheelItems = screen === "home" ? [
+    { icon: "🛍️", label: "Eladó mód", onPress: () => navigate("sellerDashboard", { role: "seller" }) },
+    { icon: "🛒", label: "Vevő mód", onPress: () => navigate("buyerDashboard", { role: "buyer" }) },
+    { icon: "📱", label: "QR Megosztás", onPress: () => navigate("qrShare") },
+    { icon: "🔍", label: "Helyi Keresés", onPress: () => navigate("localSearch") },
+  ] : activeRole === "seller" ? [
+    { icon: "👥", label: "Partnereim", onPress: () => navigate("partnerList", { role: "seller" }) },
+    { icon: "💬", label: "Üzenetek", onPress: () => navigate("messagesList", { role: "seller" }) },
+    { icon: "📅", label: "Naptáram", onPress: () => navigate("todaySchedule") },
+    { icon: "⚡", label: "Számla kiállítás", onPress: () => navigate("newService") },
+    { icon: "📄", label: "Számlák", onPress: () => navigate("invoiceList") },
+    { icon: "💰", label: "Pénzügyek", onPress: () => { if (activeContact) { navigate("partnerWorkspace", { contactId: activeContact.id, initialTab: "finance" }); } else { navigate("invoiceList"); } } },
+  ] : [
+    { icon: "👥", label: "Partnereim", onPress: () => navigate("partnerList", { role: "buyer" }) },
+    { icon: "💬", label: "Üzenetek", onPress: () => navigate("messagesList", { role: "buyer" }) },
+    { icon: "📅", label: "Naptáram", onPress: () => navigate("appointments") },
+    { icon: "📅", label: "Új időpont", onPress: () => navigate("newBooking") },
+    { icon: "📄", label: "Számláim", onPress: () => navigate("invoiceList") },
+    { icon: "💰", label: "Pénzügyek", onPress: () => { if (activeContact) { navigate("partnerWorkspace", { contactId: activeContact.id, initialTab: "finance" }); } else { navigate("invoiceList"); } } },
+  ];
 
   // ✅ VideoBackground a HOME screenhez, ImageBackground a többihez
   const Wrapper = screen === "home" ? VideoBackground : ImageBackground;
@@ -985,32 +1203,7 @@ export default function App() {
       </Animated.View>
 
       {showFab && (
-        <>
-          {fabOpen && <TouchableOpacity style={s.fabBackdrop} onPress={() => setFabOpen(false)} activeOpacity={1} />}
-          {fabOpen && (
-            <View style={[s.fabMenu, {
-              bottom: screen === "partnerWorkspace"
-                ? (appKbHeight > 0 ? appKbHeight + 224 : 212) : 112
-            }]}>
-              {quickActions.map((action, i) => (
-                <TouchableOpacity
-                  key={action.id}
-                  style={[s.fabMenuItem, i === quickActions.length - 1 && { borderBottomWidth: 0 }]}
-                  onPress={() => handleQuickAction(action.id)}
-                >
-                  <Text style={s.fabMenuIcon}>{action.icon}</Text>
-                  <Text style={s.fabMenuLabel}>{action.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          <TouchableOpacity style={[s.fab, fabOpen && s.fabOpen, {
-            bottom: screen === "partnerWorkspace"
-              ? (appKbHeight > 0 ? appKbHeight + 160 : 172) : 48
-          }]} onPress={() => setFabOpen(!fabOpen)}>
-            <Text style={s.fabText}>{fabOpen ? "✕" : "+"}</Text>
-          </TouchableOpacity>
-        </>
+        <WheelFAB items={wheelItems} />
       )}
     </Wrapper>
     </ErrorBoundary>
@@ -1052,18 +1245,23 @@ function NewBookingScreen({ contact, onSubmit, onBack }) {
   );
 }
 
-// ✅ JAVÍTOTT NewServiceScreen — "Hozzáadás a gyorslistához" gombbal
+// ✅ JAVÍTOTT NewServiceScreen — Darabszám számlálóval
 function NewServiceScreen({ contact, quickServices = [], onSubmit, onAddToQuickList, onBack }) {
   const [svcName, setSvcName]     = useState("");
   const [svcAmount, setSvcAmount] = useState("");
+  const [quantity, setQuantity]   = useState(1);
+  const [qsQuantities, setQsQuantities] = useState({});
 
   function buildItem() {
     if (!svcName.trim()) { Alert.alert("Hiányzó adat", "Add meg a szolgáltatás nevét."); return null; }
     const netto = Number(svcAmount) || 0;
+    const qty   = Math.max(1, quantity);
     return {
-      id: `oi-${Date.now()}`, serviceName: svcName.trim(),
-      netto, afa27: Math.round(netto * 0.27),
-      brutto: Math.round(netto * 1.27), amount: Math.round(netto * 1.27),
+      id: `oi-${Date.now()}`,
+      serviceName: qty > 1 ? `${svcName.trim()} (${qty} db)` : svcName.trim(),
+      quantity: qty,
+      netto: netto * qty, afa27: Math.round(netto * qty * 0.27),
+      brutto: Math.round(netto * qty * 1.27), amount: Math.round(netto * qty * 1.27),
       datum: new Date().toLocaleDateString("hu-HU"), createdAt: Date.now(),
     };
   }
@@ -1085,8 +1283,24 @@ function NewServiceScreen({ contact, quickServices = [], onSubmit, onAddToQuickL
           <TextInput style={shared.input} value={svcName} onChangeText={setSvcName}
             placeholder="pl. Személyi edzés" placeholderTextColor={colors.placeholder} />
           <Text style={shared.label}>Összeg (Ft, nettó)</Text>
-          <TextInput style={shared.input} value={svcAmount} onChangeText={setSvcAmount}
-            placeholder="pl. 10000" placeholderTextColor={colors.placeholder} keyboardType="numeric" />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <TextInput style={[shared.input, { flex: 1 }]} value={svcAmount} onChangeText={setSvcAmount}
+              placeholder="pl. 10000" placeholderTextColor={colors.placeholder} keyboardType="numeric" />
+            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: colors.bgCard, borderRadius: 12, borderWidth: 1, borderColor: colors.borderSubtle, overflow: "hidden" }}>
+              <TouchableOpacity style={{ paddingHorizontal: 12, paddingVertical: 14 }} onPress={() => setQuantity(q => Math.max(1, q - 1))}>
+                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "bold" }}>−</Text>
+              </TouchableOpacity>
+              <Text style={{ color: colors.accent, fontSize: 16, fontWeight: "bold", minWidth: 28, textAlign: "center" }}>{quantity}</Text>
+              <TouchableOpacity style={{ paddingHorizontal: 12, paddingVertical: 14 }} onPress={() => setQuantity(q => q + 1)}>
+                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "bold" }}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          {quantity > 1 && !!svcAmount && (
+            <Text style={{ color: colors.accent, fontSize: 12, marginTop: 4 }}>
+              Összesen: {(Number(svcAmount) * quantity).toLocaleString("hu-HU")} Ft nettó
+            </Text>
+          )}
 
           {/* ✅ Gyorslistára hozzáadás gomb */}
           {isCustom && !!svcAmount && (
@@ -1106,13 +1320,29 @@ function NewServiceScreen({ contact, quickServices = [], onSubmit, onAddToQuickL
           {quickServices.length > 0 && (
             <>
               <Text style={[shared.labelSmall, { marginBottom: 8, marginTop: 4 }]}>Gyors választás:</Text>
-              {quickServices.map((qs) => (
-                <TouchableOpacity key={qs.id}
-                  style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSubtle }}
-                  onPress={() => { setSvcName(qs.name); setSvcAmount(String(qs.amount)); }}>
-                  <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{qs.name} — {formatCurrency(qs.amount)}</Text>
-                </TouchableOpacity>
-              ))}
+              {quickServices.map((qs) => {
+                const qsQty = qsQuantities[qs.id] || 1;
+                return (
+                  <View key={qs.id} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8, gap: 8 }}>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.borderSubtle }}
+                      onPress={() => { setSvcName(qs.name); setSvcAmount(String(qs.amount)); setQuantity(qsQty); }}
+                    >
+                      <Text style={{ color: colors.textPrimary, fontSize: 14 }}>{qs.name} — {formatCurrency(qs.amount * qsQty)}</Text>
+                      {qsQty > 1 && <Text style={{ color: colors.accent, fontSize: 11, marginTop: 2 }}>{qsQty} db × {formatCurrency(qs.amount)}</Text>}
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: colors.bgCard, borderRadius: 12, borderWidth: 1, borderColor: colors.borderSubtle, overflow: "hidden" }}>
+                      <TouchableOpacity style={{ paddingHorizontal: 10, paddingVertical: 12 }} onPress={() => setQsQuantities(q => ({ ...q, [qs.id]: Math.max(1, (q[qs.id] || 1) - 1) }))}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: "bold" }}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "bold", minWidth: 24, textAlign: "center" }}>{qsQty}</Text>
+                      <TouchableOpacity style={{ paddingHorizontal: 10, paddingVertical: 12 }} onPress={() => setQsQuantities(q => ({ ...q, [qs.id]: (q[qs.id] || 1) + 1 }))}>
+                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: "bold" }}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
             </>
           )}
 
@@ -1138,9 +1368,9 @@ const s = StyleSheet.create({
   fab: {
     position: "absolute", right: 20, bottom: 48,
     width: 56, height: 56, borderRadius: 28,
-    backgroundColor: colors.accent,
+    backgroundColor: "rgba(255,122,26,0.55)",
     justifyContent: "center", alignItems: "center",
-    shadowColor: colors.accent, shadowOpacity: 0.5, shadowRadius: 12,
+    shadowColor: colors.accent, shadowOpacity: 0.4, shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 }, elevation: 8,
   },
   fabOpen:     { backgroundColor: "#555" },
